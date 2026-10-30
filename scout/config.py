@@ -34,6 +34,19 @@ def _load_yaml(path: Path) -> Any:
         return yaml.safe_load(f)
 
 
+def _adopt_git_dir(base: Path) -> None:
+    """一次性引导（幂等，失败静默）：云端 Claude 会话无法直接写入受保护的
+    .git 目录，版本库被落盘为 `_git`。本机进程下次启动时（打开 GUI 或
+    定时任务运行）把它收编为 `.git`，此后 git log / checkout 即可正常使用。
+    `.git` 已存在或 `_git` 不存在时什么都不做。"""
+    src, dst = base / "_git", base / ".git"
+    try:
+        if src.is_dir() and not dst.exists():
+            src.rename(dst)
+    except OSError:
+        pass
+
+
 def load_config(config_path: str | Path) -> dict[str, Any]:
     path = Path(config_path)
     if not path.exists():
@@ -45,6 +58,7 @@ def load_config(config_path: str | Path) -> dict[str, Any]:
     # 打包成 exe 后前者在解压临时目录里，后者要留在 exe 同级，见 paths.py。
     res_dir = resource_dir()
     dat_dir = data_dir()
+    _adopt_git_dir(Path(res_dir))
 
     rubric_path = res_dir / cfg.get("rubric_file", "rubric.yaml")
     sources_path = res_dir / cfg.get("sources_file", "sources.yaml")
