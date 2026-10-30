@@ -65,7 +65,11 @@ class Event:
 
     # ---------- 降权 / 排除 ----------
     solo_oriented: bool = False
+    community_venue: bool = False          # 场地是社区中心/图书馆等，约会氛围降权
     exclude_reason: Optional[str] = None   # verify 阶段写入，非 None 即剔除
+
+    # ---------- 来源侧的原始分类（保留信号，不要折叠丢失）----------
+    source_categories: list[str] = field(default_factory=list)
 
     # ---------- 去重合并证据 ----------
     evidence: list[str] = field(default_factory=list)   # 独立来源 id 列表，去重时合并

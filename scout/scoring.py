@@ -190,11 +190,16 @@ def score_event(event: Event, rubric: dict) -> Event:
         missing += int(ds.missing)
 
     total = weighted * 10.0                      # 0–100
-    modifier = 1.0
+    mods: dict[str, float] = {}
     if event.solo_oriented:
-        modifier = rubric["modifiers"]["solo_oriented_multiplier"]
-        detail["_modifier"] = {"solo_oriented": modifier}
-    total *= modifier
+        mods["solo_oriented"] = rubric["modifiers"]["solo_oriented_multiplier"]
+    if event.community_venue:
+        # 社区中心/图书馆场地：活动本身合法，但约会观感打折（v1.2.0）
+        mods["community_venue"] = rubric["modifiers"].get("community_venue_multiplier", 1.0)
+    if mods:
+        detail["_modifier"] = mods
+        for m in mods.values():
+            total *= m
 
     event.scores = detail
     event.total = round(total, 1)

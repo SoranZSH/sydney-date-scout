@@ -8,7 +8,13 @@ interval_days: 3          # 每 3 天跑一次
 lookahead_days: 21        # 只推荐未来 21 天内开始的活动
 lookahead_min_days: 0     # 0 = 含今天；设 1 可排除当天
 resend_after_days: 30     # 同一活动 30 天内不重复推送（时间/价格变动除外）
+series_max_sends: 3       # 同一系列（标题+场地）累计最多推几次（v1.2.0，周期课/市集防刷屏）
+max_per_category: 3       # 单批次每个类别最多几条（v1.2.0，防止一批十条八条同类）
 send_when_empty: true     # 无达标项目时仍发一封「本次无推荐」说明信
+
+# 追加自定义排除词（纯子串匹配，命中即剔除；内置的儿童/志愿者/老年规则见 scout/verify.py）
+exclude_keywords: []
+#  - "pub crawl"
 require_price: true       # 价格未知的条目直接剔除（宁缺毋滥）
 dedupe_threshold: 0.82
 

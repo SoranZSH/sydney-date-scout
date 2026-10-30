@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime
@@ -45,14 +46,37 @@ CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_key TEXT NOT NULL,
+    uid TEXT,
+    title TEXT,
+    verdict TEXT NOT NULL,              -- like | dislike
+    created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_sent_uid ON sent_history(uid);
 CREATE INDEX IF NOT EXISTS idx_sent_batch ON sent_history(batch_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_series ON feedback(series_key);
 """
 
 
 def _fingerprint(e: Event) -> str:
     # 时间或价格变动即视为「新版本」，会重置 resend 冷却。
     return f"{e.start.isoformat() if e.start else ''}|{e.price_per_person}"
+
+
+def _norm(text: str) -> str:
+    return "".join(ch.lower() for ch in (text or "") if ch.isalnum() or ch.isspace()).strip()
+
+
+def series_key(title: str, venue: str) -> str:
+    """同一「系列」的稳定标识：标题 + 场地（都归一化后哈希）。
+
+    v1.2.0 修复的核心 bug：uid 用「标题+开始时间」生成，每周重复的课程
+    下一场时间一变就是新 uid，30 天冷却形同虚设（同一门写作课三个月被推 7 次）。
+    冷却与推送次数上限都应该按「系列」算，与某一场的具体时间无关。
+    """
+    return hashlib.sha1(f"{_norm(title)}|{_norm(venue)}".encode("utf-8")).hexdigest()[:16]
 
 
 class Store:
@@ -68,10 +92,25 @@ class Store:
     def _migrate(self) -> None:
         """给早期版本建的库补上后加的列，避免升级后打不开旧数据。"""
         cols = {r["name"] for r in self.db.execute("PRAGMA table_info(sent_history)")}
-        for col in ("batch_id INTEGER", "payload TEXT"):
+        for col in ("batch_id INTEGER", "payload TEXT", "series_key TEXT"):
             name = col.split()[0]
             if name not in cols:
                 self.db.execute(f"ALTER TABLE sent_history ADD COLUMN {col}")
+
+        # v1.2.0：给历史推送记录回填 series_key，这样「同一系列最多推 N 次」
+        # 从升级那一刻起就把过去 22 批次的重复历史算进去，而不是从零开始。
+        rows = self.db.execute(
+            "SELECT id, title, payload FROM sent_history WHERE series_key IS NULL"
+        ).fetchall()
+        for r in rows:
+            venue = ""
+            if r["payload"]:
+                try:
+                    venue = json.loads(r["payload"]).get("venue_name") or ""
+                except (json.JSONDecodeError, AttributeError):
+                    venue = ""
+            self.db.execute("UPDATE sent_history SET series_key=? WHERE id=?",
+                            (series_key(r["title"], venue), r["id"]))
 
     def close(self) -> None:
         self.db.close()
@@ -105,7 +144,35 @@ class Store:
         self.db.commit()
 
     # ---------- 跨批次去重 / resend_after_days ----------
-    def should_send(self, e: Event, resend_after_days: int) -> bool:
+    def should_send(self, e: Event, resend_after_days: int,
+                    series_max_sends: int = 3) -> bool:
+        """三道闸，任何一道不过就不再推：
+
+        1. 用户点过「不再推这类」的系列 —— 永久不推。
+        2. 系列级冷却与上限：同一系列（标题+场地）在 resend_after_days 内
+           只推一次，累计最多推 series_max_sends 次。周期性课程/市集每场
+           时间都不同，按 uid 永远查不到历史，必须按系列拦。
+        3. uid 级：同一场活动时间/价格没变就遵守冷却（保底，兼容旧数据）。
+        """
+        skey = series_key(e.title, e.venue_name)
+
+        if self.db.execute(
+            "SELECT 1 FROM feedback WHERE series_key=? AND verdict='dislike' LIMIT 1",
+            (skey,),
+        ).fetchone():
+            return False
+
+        series_rows = self.db.execute(
+            "SELECT sent_at FROM sent_history WHERE series_key=? ORDER BY sent_at DESC",
+            (skey,),
+        ).fetchall()
+        if series_rows:
+            if series_max_sends and len(series_rows) >= series_max_sends:
+                return False
+            last = datetime.fromisoformat(series_rows[0]["sent_at"])
+            if (datetime.now() - last).days < resend_after_days:
+                return False
+
         row = self.db.execute(
             "SELECT fingerprint, sent_at FROM sent_history WHERE uid=? ORDER BY sent_at DESC LIMIT 1",
             (e.uid,),
@@ -116,6 +183,23 @@ class Store:
             return True  # 时间/价格变动，重置冷却
         last_sent = datetime.fromisoformat(row["sent_at"])
         return (datetime.now() - last_sent).days >= resend_after_days
+
+    # ---------- 用户反馈（v1.2.0）----------
+    def add_feedback(self, title: str, venue: str, verdict: str,
+                     uid: Optional[str] = None) -> None:
+        self.db.execute(
+            "INSERT INTO feedback (series_key, uid, title, verdict, created_at) VALUES (?,?,?,?,?)",
+            (series_key(title, venue), uid, title, verdict, datetime.now().isoformat()),
+        )
+        self.db.commit()
+
+    def feedback_for(self, title: str, venue: str) -> Optional[str]:
+        """返回该系列最近一次反馈（like/dislike），没有则 None。"""
+        row = self.db.execute(
+            "SELECT verdict FROM feedback WHERE series_key=? ORDER BY id DESC LIMIT 1",
+            (series_key(title, venue),),
+        ).fetchone()
+        return row["verdict"] if row else None
 
     # ---------- 批次 ----------
     def create_batch(self, events: list[Event], rubric_version: str,
@@ -130,10 +214,11 @@ class Store:
         for e in events:
             self.db.execute(
                 "INSERT INTO sent_history "
-                "(batch_id, uid, title, total, rubric_version, fingerprint, payload, sent_at) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "(batch_id, uid, title, total, rubric_version, fingerprint, payload, sent_at, series_key) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (batch_id, e.uid, e.title, e.total, rubric_version, _fingerprint(e),
-                 json.dumps(e.as_payload(), ensure_ascii=False), ts),
+                 json.dumps(e.as_payload(), ensure_ascii=False), ts,
+                 series_key(e.title, e.venue_name)),
             )
         self.db.commit()
         return batch_id

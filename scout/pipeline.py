@@ -132,13 +132,24 @@ def run_once(cfg: dict, dry_run: bool = False, check_urls: bool = False,
     qualifying.sort(key=lambda e: e.total, reverse=True)
     max_items = rubric["thresholds"]["max_items"]
     resend_days = cfg.get("resend_after_days", 30)
+    series_max = cfg.get("series_max_sends", 3)
+    # 批次内品类多样性上限：避免一批十条有八条都是 experience。
+    # 注意这是「推送层」的选择约束，单个活动的分数仍然只由自身属性决定，
+    # 不破坏跨批次可比性。
+    max_per_cat = cfg.get("max_per_category", 3)
 
     skipped_recent = 0
+    skipped_diversity = 0
+    cat_count: dict[str, int] = {}
     final: list[Event] = []
     for e in qualifying:
-        if not store.should_send(e, resend_days):
+        if not store.should_send(e, resend_days, series_max):
             skipped_recent += 1
             continue
+        if max_per_cat and cat_count.get(e.category, 0) >= max_per_cat:
+            skipped_diversity += 1
+            continue
+        cat_count[e.category] = cat_count.get(e.category, 0) + 1
         final.append(e)
         if len(final) >= max_items:
             break
@@ -210,6 +221,7 @@ def run_once(cfg: dict, dry_run: bool = False, check_urls: bool = False,
         "below_threshold_scores": sorted(below_threshold, reverse=True),
         "vetoed": vetoed,
         "skipped_recent": skipped_recent,
+        "skipped_diversity": skipped_diversity,
         "output_file": output_file,
         "sent": sent,
         "errors": errors,

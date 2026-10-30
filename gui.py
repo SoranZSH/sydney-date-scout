@@ -112,6 +112,18 @@ class ScoutApp(tk.Tk):
                                highlightbackground="#eee2da")
         detail_wrap.pack(fill="both", expand=True)
 
+        # ---- 反馈栏（v1.2.0）：没有反馈的推荐系统只是定时广播 ----
+        fb = tk.Frame(right, bg=BG)
+        fb.pack(fill="x", pady=(8, 0))
+        self.fb_status = tk.Label(fb, text="", bg=BG, fg=MUTED, font=(FONT, 9))
+        self.fb_status.pack(side="left")
+        self.dislike_btn = ttk.Button(fb, text="👎 不再推这类",
+                                      command=lambda: self._feedback("dislike"))
+        self.dislike_btn.pack(side="right")
+        self.like_btn = ttk.Button(fb, text="👍 感兴趣",
+                                   command=lambda: self._feedback("like"))
+        self.like_btn.pack(side="right", padx=(0, 8))
+
         self.detail = tk.Text(detail_wrap, bg=CARD, fg=TEXT, font=(FONT, 10),
                               relief="flat", wrap="word", padx=18, pady=16,
                               cursor="arrow", highlightthickness=0)
@@ -201,7 +213,36 @@ class ScoutApp(tk.Tk):
         sel = self.event_list.curselection()
         if not sel:
             return
-        self._render_event(self.current_events[sel[0]])
+        self.current_event = self.current_events[sel[0]]
+        self._render_event(self.current_event)
+        self._refresh_feedback_label()
+
+    # ------------------------------------------------------- 反馈（v1.2.0）
+    def _refresh_feedback_label(self) -> None:
+        ev = getattr(self, "current_event", None)
+        if not ev:
+            self.fb_status.config(text="")
+            return
+        store = self._store()
+        try:
+            verdict = store.feedback_for(ev.get("title", ""), ev.get("venue_name", ""))
+        finally:
+            store.close()
+        text = {"like": "已标记：感兴趣",
+                "dislike": "已标记：不再推这类（同名同场地的活动以后不会出现）"}.get(verdict, "")
+        self.fb_status.config(text=text)
+
+    def _feedback(self, verdict: str) -> None:
+        ev = getattr(self, "current_event", None)
+        if not ev:
+            return
+        store = self._store()
+        try:
+            store.add_feedback(ev.get("title", ""), ev.get("venue_name", ""),
+                               verdict, ev.get("uid"))
+        finally:
+            store.close()
+        self._refresh_feedback_label()
 
     # ------------------------------------------------------- 详情渲染
     def _render_placeholder(self, text: str) -> None:
@@ -258,8 +299,9 @@ class ScoutApp(tk.Tk):
                          f"　{s.get('label', ''):　<6}{s.get('score', 0):>5}/10　"
                          f"×{s.get('weight', 0)}　{s.get('reason', '')}\n", "dim")
             if "_modifier" in scores:
-                d.insert("end",
-                         f"　（单人向降权 ×{scores['_modifier'].get('solo_oriented')}）\n", "dim")
+                zh = {"solo_oriented": "单人向", "community_venue": "社区场地"}
+                parts = [f"{zh.get(k, k)} ×{v}" for k, v in scores["_modifier"].items()]
+                d.insert("end", f"　（降权：{'、'.join(parts)}）\n", "dim")
 
         # ---- 约会方案 ----
         if plan.get("timeline"):
