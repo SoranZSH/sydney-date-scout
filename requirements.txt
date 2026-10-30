@@ -1,0 +1,12 @@
+PyYAML>=6.0
+requests>=2.31
+Jinja2>=3.1
+feedparser>=6.0
+icalendar>=5.0
+python-dateutil>=2.8
+
+# Needed only when email.proxy is configured in config.yaml
+PySocks>=1.7
+
+# Optional: only needed when llm.enabled=true in config.yaml
+# anthropic>=0.40

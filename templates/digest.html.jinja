@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f1ee;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;color:#2b2b2b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ee;padding:24px 0;">
+<tr><td align="center">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+
+  <tr><td style="background:#c96a4e;padding:28px 32px;">
+    <h1 style="margin:0;font-size:22px;color:#fff;">悉尼约会提案助理</h1>
+    <p style="margin:6px 0 0;color:#ffe4d9;font-size:13px;">{{ generated_at }} · rubric v{{ rubric_version }} · 推荐阈值 {{ recommend_total }} 分</p>
+  </td></tr>
+
+  {% if empty %}
+  <tr><td style="padding:32px;">
+    <p style="font-size:15px;line-height:1.7;">本次一共核验通过 {{ verified_count }} 个活动，但没有任何一个达到 {{ recommend_total }} 分的推荐线。</p>
+    <p style="font-size:15px;line-height:1.7;color:#8a8a8a;">不降低标准凑数——宁可这次不推，也不推不够好的方案。下一批将在 {{ interval_days }} 天后自动运行。</p>
+  </td></tr>
+  {% else %}
+  <tr><td style="padding:24px 32px 0;">
+    <p style="font-size:14px;color:#6b6b6b;">本次达标 {{ events|length }} 个（上限 {{ max_items }}，不足则少推）。</p>
+  </td></tr>
+
+  {% for e in events %}
+  <tr><td style="padding:0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee2da;border-radius:10px;margin-bottom:20px;">
+      <tr><td style="padding:18px 20px 8px;">
+        <table role="presentation" width="100%"><tr>
+          <td><h2 style="margin:0;font-size:17px;">{{ loop.index }}. {{ e.title }}</h2></td>
+          <td align="right" style="white-space:nowrap;"><span style="font-size:20px;font-weight:700;color:#c96a4e;">{{ e.total }}</span><span style="font-size:12px;color:#999;">/100</span></td>
+        </tr></table>
+        <p style="margin:6px 0 0;font-size:13px;color:#999;">
+          {{ e.start.strftime('%m-%d (%a) %H:%M') if e.start else '时间待定' }} ·
+          {{ e.venue_name }}{% if e.suburb %}，{{ e.suburb }}{% endif %} ·
+          {% if e.price_per_person %}A${{ '%.0f'|format(e.price_per_person) }}/人{% else %}免费{% endif %}
+        </p>
+      </td></tr>
+
+      <tr><td style="padding:4px 20px;">
+        <p style="font-size:14px;line-height:1.6;color:#444;">{{ e.description }}</p>
+      </td></tr>
+
+      <tr><td style="padding:4px 20px;">
+        <p style="font-size:13px;margin:6px 0;"><b>推荐理由：</b>{{ e.plan.reason }}</p>
+        <p style="font-size:13px;margin:6px 0;"><b>适合对象：</b>{{ e.audience|join('、') }}</p>
+        {% if e.booking_url %}<p style="font-size:13px;margin:6px 0;"><b>订票/详情：</b><a href="{{ e.booking_url }}" style="color:#c96a4e;">{{ e.booking_url }}</a></p>{% endif %}
+      </td></tr>
+
+      <tr><td style="padding:4px 20px;">
+        <table role="presentation" width="100%" style="font-size:12px;border-collapse:collapse;">
+          <tr style="color:#999;">
+            {% for dim, s in e.scores.items() if not dim.startswith('_') %}
+            <td style="padding:2px 4px;text-align:center;">{{ s.label }}<br><b style="color:#333;">{{ s.score }}</b></td>
+            {% endfor %}
+          </tr>
+        </table>
+      </td></tr>
+
+      {% if e.plan.timeline %}
+      <tr><td style="padding:10px 20px 4px;">
+        <p style="font-size:13px;margin:0 0 4px;"><b>约会方案</b></p>
+        <ul style="margin:0;padding-left:18px;font-size:13px;color:#444;line-height:1.7;">
+          {% for step in e.plan.timeline %}
+          <li>{{ step.time }} {{ step.label }} — {{ step.detail }}</li>
+          {% endfor %}
+        </ul>
+      </td></tr>
+      {% endif %}
+
+      <tr><td style="padding:4px 20px 16px;">
+        <p style="font-size:13px;margin:6px 0;color:#666;">
+          <b>预算（每人约）：</b>前置 A${{ e.plan.budget.pre_aud }} + 主活动 A${{ e.plan.budget.main_aud }} + 续摊 A${{ e.plan.budget.post_aud }} + 交通 A${{ e.plan.budget.transit_aud }}
+          ＝ <b>A${{ e.plan.budget.per_person_total_aud }}</b>（两人共 A${{ e.plan.budget.couple_total_aud }}）
+        </p>
+        {% if e.plan.alternates %}
+        <p style="font-size:12px;margin:6px 0;color:#999;">下雨备选：{{ e.plan.alternates.rainy_plan }}</p>
+        {% endif %}
+        {% if e.plan.topics %}
+        <p style="font-size:12px;margin:6px 0;color:#999;">聊天话题：{{ e.plan.topics|join(' / ') }}</p>
+        {% endif %}
+      </td></tr>
+    </table>
+  </td></tr>
+  {% endfor %}
+  {% endif %}
+
+  <tr><td style="padding:20px 32px;background:#faf7f4;font-size:11px;color:#aaa;">
+    分数在同一 rubric 版本下跨批次可比，不因同期活动多少而变化。下次运行：约 {{ interval_days }} 天后。
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

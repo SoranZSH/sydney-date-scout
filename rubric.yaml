@@ -1,0 +1,164 @@
+# ============================================================
+# 固定评分锚点 (Scoring Rubric) — 版本化，改动即视为新版本
+# 所有分值均为「绝对标准」：只看单个活动自身属性，
+# 不参考当期活动数量、平均分或相对排名。
+# 修改本文件后，历史分数不再可直接比较 —— 请同步升级 version。
+# ============================================================
+version: "1.1.0"
+
+# ------------------------------------------------------------
+# v1.1.0 变更（2026-08-01）：按真实数据源重新配权重，阈值 68 不变。
+#
+# 起因：v1.0.0 的权重是拿 fixtures 里手写的样例校准的，那些样例带着
+# `media_mentions: 5`、`first_time_in_city: true` 这类真实世界拿不到的信号。
+# 接上第一个真实源（City of Sydney 官方活动库）后实测 42 个活动：
+#
+#   讨论热度  权重 0.12，实际得分恒为 2.0 —— 该维度定义是「独立信息源计数」，
+#             只接了一个源，任何活动都只能算 1 家，分数与活动本身好坏无关。
+#   新鲜感    权重 0.18，实际最高 4.0 —— 没有任何官方活动数据会标注「本届首办」，
+#             公开数据最多推断出「年度重复举办」。
+#
+# 合计 30% 的权重被数据可得性锁死在 2.9/10，导致最高分 60.8，68 分线永远不可能触发。
+# 这不是「标准太严」，是这两个维度在当前数据下失去了区分度。
+#
+# 处理方式是把权重移到能被真实测量、且确实决定约会体验的维度上，而不是降低阈值：
+# 分数线保持 68，含义仍然是「值得为它安排一次约会」。
+#
+#   freshness      0.18 → 0.12   保留但不再主导；接入能标注首演/首展的源后可调回
+#   buzz           0.12 → 0.04   保留少量权重：接入第二个源后跨源去重会让它重新有效
+#   date_vibe      0.22 → 0.26   五项检查表全部来自真实字段，是「适不适合约会」的核心
+#   interactivity  0.14 → 0.18   由官方活动分类映射，区分度好
+#   scarcity       0.12 → 0.14   官方给出全部场次日期，完全可测
+#   value          0.12 → 0.14   价格与时长均为真实字段
+#   transit        0.10 → 0.12   由场馆真实经纬度计算
+#
+# 注意：这是**跨版本不可比**的改动。改动时数据库里没有任何历史推送记录，
+# 所以实际没有损失任何可比性 —— 之后再改就要付出这个代价了。
+# ------------------------------------------------------------
+
+weights:            # 合计必须为 1.0
+  freshness: 0.12   # 新鲜感
+  scarcity: 0.14    # 稀缺性
+  buzz: 0.04        # 讨论热度
+  date_vibe: 0.26   # 约会氛围
+  interactivity: 0.18
+  value: 0.14       # 性价比
+  transit: 0.12     # 交通便利度
+
+thresholds:
+  recommend_total: 68      # 总分（0–100）达到即推荐，固定不变
+  max_items: 10            # 上限，非目标值；不足则少推
+  min_completeness: 0.70   # 关键信号完整度低于此值直接弃用
+  floors:                  # 任一维度低于下限即否决（一票否决）
+    date_vibe: 5
+    transit: 4
+    value: 3
+
+modifiers:
+  # 更适合独自参加的项目（兴趣社群/讲座/工作坊单人向）——固定降权系数
+  solo_oriented_multiplier: 0.85
+  # 缺失信号时的保守默认分（同时计入 completeness 惩罚）
+  unknown_defaults:
+    freshness: 3
+    scarcity: 3
+    buzz: 2
+    date_vibe: 4
+    interactivity: 3
+    value: 4
+    transit: 4
+
+# ------------------------------------------------------------
+# 各维度 0–10 绝对锚点
+# ------------------------------------------------------------
+dimensions:
+
+  freshness:
+    definition: "该活动/场地对悉尼观众的『第一次』程度。"
+    anchors:
+      first_time_in_city: 10        # 首次登陆悉尼/澳洲首演首展
+      first_edition: 8              # 首届举办
+      new_opening_days_le_30: 8     # 新开业 ≤30 天
+      new_opening_days_le_90: 6     # 新开业 31–90 天
+      annual_repeat_new_content: 6  # 年度活动但本届有全新内容
+      annual_repeat_same: 4         # 年度活动内容基本沿用
+      permanent_with_new_content: 3 # 常设但近期新增内容
+      permanent_no_change: 0        # 常设无更新
+
+  scarcity:
+    definition: "错过后短期内无法再参与的程度。"
+    anchors_window_days:   # 可参与窗口期（取更严格者）
+      - {max: 1, score: 10}
+      - {max: 3, score: 8}
+      - {max: 14, score: 6}
+      - {max: 45, score: 4}
+      - {max: 120, score: 2}
+      - {max: 99999, score: 0}
+    anchors_sessions:      # 剩余场次
+      - {max: 1, score: 10}
+      - {max: 3, score: 8}
+      - {max: 10, score: 6}
+      - {max: 30, score: 4}
+      - {max: 99999, score: 2}
+    ticket_status_bonus:
+      limited: 1           # 余票紧张 +1（封顶 10）
+      sold_out: 0
+
+  buzz:
+    definition: "近30天内的独立信息源讨论量（绝对计数，不做同期对比）。"
+    anchors_media_mentions:
+      - {min: 8, score: 10}
+      - {min: 5, score: 8}
+      - {min: 3, score: 6}
+      - {min: 2, score: 4}
+      - {min: 1, score: 2}
+      - {min: 0, score: 0}
+    anchors_social_signal:      # 取与媒体报道数中的较高分
+      - {min: 50000, score: 10}
+      - {min: 10000, score: 8}
+      - {min: 3000, score: 6}
+      - {min: 500, score: 4}
+      - {min: 100, score: 2}
+      - {min: 0, score: 0}
+
+  date_vibe:
+    definition: "两人同行的氛围友好度。以下 5 项各计 2 分，满分 10。"
+    checklist:
+      conversation_friendly: 2   # 噪音 ≤ moderate，能正常交谈
+      has_seating: 2             # 有座位/可停留而非纯排队走动
+      photogenic: 2              # 环境出片/有记忆点
+      evening_or_weekend: 2      # 时段适合约会（傍晚/夜间/周末白天）
+      nearby_food_options: 2     # 步行范围内可续摊（餐/酒/甜品）
+
+  interactivity:
+    definition: "两人在活动中产生互动与共同经历的程度。"
+    anchors:
+      co_create: 10          # 共同完成一件事（陶艺、双人料理、密室）
+      hands_on: 8            # 动手参与
+      light_participate: 6   # 可走动、试吃、做选择
+      spectate_shared: 4     # 共同观看且可随时交流（展览、市集）
+      spectate_silent: 2     # 需保持安静（电影、音乐厅）
+      none: 0
+
+  value:
+    definition: "人均每小时花费（AUD/人/小时）。超预算在核验阶段直接剔除，不在此扣分。"
+    anchors_aud_per_hour:
+      - {max: 0, score: 10}
+      - {max: 10, score: 9}
+      - {max: 20, score: 7}
+      - {max: 35, score: 5}
+      - {max: 60, score: 3}
+      - {max: 100, score: 1}
+      - {max: 999999, score: 0}
+
+  transit:
+    definition: "自配置的 home_suburb 出发，公共交通门到门耗时与换乘次数。"
+    anchors:
+      - {max_minutes: 15, max_transfers: 0, score: 10}
+      - {max_minutes: 25, max_transfers: 1, score: 8}
+      - {max_minutes: 40, max_transfers: 1, score: 6}
+      - {max_minutes: 55, max_transfers: 2, score: 4}
+      - {max_minutes: 75, max_transfers: 3, score: 2}
+      - {max_minutes: 99999, max_transfers: 99, score: 0}
+    walk_penalty:
+      over_minutes: 12    # 末端步行超过 12 分钟
+      penalty: 1

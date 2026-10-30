@@ -1,0 +1,9 @@
+[Unit]
+Description=每天触发一次悉尼约会提案助理（程序内部间隔守卫保证严格 interval_days 天才真正运行）
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

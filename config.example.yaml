@@ -1,0 +1,99 @@
+# ==========================================================
+# 悉尼约会提案助理 —— 用户配置
+# 复制为 config.yaml 后修改。密码等敏感信息用 ${ENV_VAR} 引用环境变量。
+# ==========================================================
+
+# ---------- 运行 ----------
+interval_days: 3          # 每 3 天跑一次
+lookahead_days: 21        # 只推荐未来 21 天内开始的活动
+lookahead_min_days: 0     # 0 = 含今天；设 1 可排除当天
+resend_after_days: 30     # 同一活动 30 天内不重复推送（时间/价格变动除外）
+send_when_empty: true     # 无达标项目时仍发一封「本次无推荐」说明信
+require_price: true       # 价格未知的条目直接剔除（宁缺毋滥）
+dedupe_threshold: 0.82
+
+db_path: data/scout.db
+output_dir: data/out
+templates_dir: templates
+rubric_file: rubric.yaml
+sources_file: sources.yaml
+
+# ---------- 个人偏好（可配置）----------
+home_suburb: "Surry Hills"        # 计算交通便利度的起点
+max_distance_km: 40               # 超出即剔除（短途活动可调大到 150）
+budget_per_person_aud: 120        # 人均预算上限，超出即剔除
+
+categories:                       # 订阅的类别；删除某项即不再推送
+  - film
+  - performance
+  - exhibition
+  - festival
+  - market
+  - food
+  - venue
+  - experience
+  - sport
+  - nature
+  - sale
+  - daytrip
+# 注：esports / anime 已在代码层面硬排除，无需在此配置。
+
+# ---------- 约会方案参数 ----------
+meet_buffer_minutes: 45           # 主活动前的碰头缓冲
+estimated_pre_cost_aud: 12        # 前置咖啡/饮品估算
+estimated_post_cost_aud: 35       # 续摊估算
+estimated_transit_cost_aud: 8
+
+area_anchors:                     # 各区的前置/续摊锚点，按自己的口味改
+  default:
+    pre: ["附近的独立咖啡馆", "书店门口"]
+    post: ["步行范围内的小酒馆", "夜宵摊"]
+    rainy: "就近改去室内展馆或有屋顶座位的餐酒馆"
+  "CBD":
+    pre: ["Single O 咖啡", "QVB 一层咖啡座"]
+    post: ["Bar Topa 小食酒吧", "Frankie's Pizza"]
+    rainy: "改去 Strand Arcade 一带的室内餐酒馆"
+  "Surry Hills":
+    pre: ["Reuben Hills 咖啡", "Paramount Coffee Project"]
+    post: ["Arthur Pizza", "Dead Ringer 餐酒馆"]
+  "Barangaroo":
+    pre: ["Barangaroo Reserve 海边散步"]
+    post: ["Bea 餐厅露台", "House of Pocket"]
+  "Newtown":
+    pre: ["Cornersmith 咖啡"]
+    post: ["Mary's 汉堡", "Earl's Juke Joint 酒吧"]
+
+# ---------- 通知方式：桌面弹窗（默认）----------
+notify:
+  enabled: true
+  auto_close_seconds: 0     # 0 = 一直显示到手动关闭；设 30 则 30 秒后自动消失
+
+# ---------- 邮件（可选，默认关闭）----------
+# 国内直连 Gmail 的 SMTP 端口常被限制，所以默认走弹窗而不是邮件。
+# 想启用改成 enabled: true，并先用 `python run.py test-email` 确认能连通。
+email:
+  enabled: false
+  to: ["you@example.com"]         # 可填多个收件人
+  from_addr: "scout@example.com"
+  from_name: "Sydney Date Scout"
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587                  # 587=STARTTLS，465=SSL
+  smtp_user: "${SMTP_USER}"
+  smtp_password: "${SMTP_PASSWORD}"   # Gmail 请用应用专用密码
+  timeout_seconds: 30
+
+  # 可选：让发信走本地代理。
+  # 国内网络直连 Gmail 的 587/465 端口常超时（WinError 10060）；
+  # 浏览器能打开 Gmail 不代表这里能连上 —— Python 发信走原始 socket，
+  # 不读 HTTP_PROXY 环境变量，必须在这里显式配置。
+  # 需要先 pip install PySocks。type 可选 socks5 / http。
+  # proxy:
+  #   type: socks5
+  #   host: "127.0.0.1"
+  #   port: 7897
+
+# ---------- 可选：LLM 润色约会文案 ----------
+llm:
+  enabled: false
+  model: "claude-sonnet-5"
+  api_key_env: "ANTHROPIC_API_KEY"

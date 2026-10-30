@@ -1,0 +1,10 @@
+[Unit]
+Description=悉尼约会提案助理 —— 单次运行（由 sydney-date-scout.timer 触发）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/date-scout
+EnvironmentFile=/opt/date-scout/.env
+ExecStart=/usr/bin/python3 /opt/date-scout/run.py run --respect-interval

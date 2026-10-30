@@ -1,0 +1,273 @@
+# ==========================================================
+# 离线演示样例 —— 供 `python run.py run --dry-run` 跑通全链路。
+#
+# 用 start_offset_days（相对"现在"的天数）+ start_time 而不是绝对日期，
+# 这样样例永远落在 lookahead_days 窗口内，不会因为时间流逝而"过期"。
+#
+# 覆盖：5 条应达标推荐、3 条应核验通过但未达标、1 条应因约会氛围低于
+# 下限被一票否决、2 条应因电竞/动漫被硬排除、1 条应因超预算剔除、
+# 2 条应因超距离剔除 —— 一共 13 条，加上 sources.yaml 里的 astro 源 1 条，
+# 合计 14 条，用来验证 README 描述的漏斗数字。
+# ==========================================================
+
+- title: "悉尼电影节开幕首映：《潮汐》悉尼首映礼"
+  category: film
+  venue: "State Theatre"
+  suburb: "CBD"
+  url: "https://example.com/events/sydney-film-festival-opening"
+  price_per_person: 25
+  duration_hours: 2.5
+  start_offset_days: 5
+  start_time: "19:00"
+  description: "澳大利亚首映，导演映后见面会，State Theatre 金碧辉煌的百年影院。"
+  signals:
+    first_time_in_city: true
+    window_days: 3
+    media_mentions: 6
+    noise_level: "quiet"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "spectate_silent"
+    transit_minutes: 20
+    transit_transfers: 0
+    distance_km: 4
+
+- title: "独立剧场新作首演《一个人的房间》"
+  category: performance
+  venue: "Belvoir St Theatre"
+  suburb: "Surry Hills"
+  url: "https://example.com/events/belvoir-new-play"
+  price_per_person: 45
+  duration_hours: 2
+  start_offset_days: 9
+  start_time: "20:00"
+  description: "本土新锐编剧首部长剧，350 座黑匣子剧场，演后有主创对谈。"
+  signals:
+    is_first_edition: true
+    window_days: 10
+    media_mentions: 4
+    noise_level: "quiet"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "spectate_silent"
+    transit_minutes: 18
+    transit_transfers: 0
+    distance_km: 2
+
+- title: "沉浸式数字艺术展 悉尼首展"
+  category: exhibition
+  venue: "The Cutaway"
+  suburb: "Barangaroo"
+  url: "https://example.com/events/immersive-digital-art"
+  price_per_person: 20
+  duration_hours: 1.5
+  start_offset_days: 12
+  start_time: "14:00"
+  description: "投影 + 音效包裹的沉浸式艺术空间，港湾岩洞场馆本身就很出片。"
+  signals:
+    first_time_in_city: true
+    window_days: 30
+    media_mentions: 2
+    noise_level: "moderate"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "spectate_shared"
+    transit_minutes: 12
+    transit_transfers: 0
+    distance_km: 3
+
+- title: "海港美食美酒节"
+  category: festival
+  venue: "Darling Harbour"
+  suburb: "CBD"
+  url: "https://example.com/events/harbour-food-wine-festival"
+  price_per_person: 15
+  duration_hours: 3
+  start_offset_days: 6
+  start_time: "17:00"
+  description: "本届新增本地精酿与海鲜市集板块，傍晚有港湾灯光表演。"
+  signals:
+    is_annual_repeat: true
+    has_new_content: true
+    window_days: 5
+    media_mentions: 8
+    noise_level: "moderate"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "light_participate"
+    transit_minutes: 30
+    transit_transfers: 1
+    distance_km: 5
+
+- title: "全新月光夜市"
+  category: market
+  venue: "Prince Alfred Park"
+  suburb: "Surry Hills"
+  url: "https://example.com/events/moonlight-night-market"
+  price_per_person: 0
+  duration_hours: 2
+  start_offset_days: 3
+  start_time: "18:00"
+  description: "首次举办的周五夜市，手作摊位 + 小吃车，免费入场。"
+  signals:
+    first_time_in_city: true
+    window_days: 60
+    media_mentions: 5
+    noise_level: "moderate"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "light_participate"
+    transit_minutes: 22
+    transit_transfers: 0
+    distance_km: 2
+
+- title: "话题新餐厅：柴火炉意面馆"
+  category: food
+  venue: "Fuoco Pasta Bar"
+  suburb: "Newtown"
+  url: "https://example.com/events/fuoco-pasta-opening"
+  price_per_person: 55
+  duration_hours: 1.5
+  start_offset_days: 2
+  start_time: "19:30"
+  description: "开业两周，柴火炉现做意面，需提前订位，本地美食号连续报道。"
+  signals:
+    new_opening_days: 15
+    window_days: 200
+    media_mentions: 7
+    noise_level: "moderate"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "light_participate"
+    transit_minutes: 10
+    transit_transfers: 0
+    distance_km: 3
+
+- title: "屋顶酒吧新开业"
+  category: venue
+  venue: "Skyline Rooftop Bar"
+  suburb: "CBD"
+  url: "https://example.com/events/skyline-rooftop-opening"
+  price_per_person: 40
+  duration_hours: 2
+  start_offset_days: 15
+  start_time: "18:30"
+  description: "开业一个半月，天台可看日落，人均消费偏高、报道不多。"
+  signals:
+    new_opening_days: 45
+    window_days: 300
+    media_mentions: 1
+    noise_level: "moderate"
+    has_seating: true
+    photogenic: true
+    evening_or_weekend: true
+    nearby_food_options: true
+    interaction: "light_participate"
+    transit_minutes: 35
+    transit_transfers: 1
+    distance_km: 6
+
+- title: "年度品牌折扣清仓周"
+  category: sale
+  venue: "Broadway Shopping Centre"
+  suburb: "Glebe"
+  url: "https://example.com/events/annual-clearance-week"
+  price_per_person: 0
+  duration_hours: 2
+  start_offset_days: 4
+  start_time: "10:00"
+  description: "年度清仓大促，商场周末人潮拥挤嘈杂，几乎没有座位，纯粹逛街扫货。"
+  signals:
+    is_annual_repeat: true
+    has_new_content: false
+    window_days: 2
+    media_mentions: 6
+    noise_level: "loud"
+    has_seating: false
+    photogenic: false
+    evening_or_weekend: true
+    nearby_food_options: false
+    interaction: "light_participate"
+    transit_minutes: 15
+    transit_transfers: 0
+    distance_km: 3
+
+# ---------- 以下用于验证过滤/剔除逻辑 ----------
+
+- title: "英雄联盟悉尼邀请赛"
+  category: esports          # 硬排除类别 —— 无论分数多高都不推
+  venue: "Qudos Bank Arena"
+  suburb: "Sydney Olympic Park"
+  url: "https://example.com/events/lol-invitational"
+  price_per_person: 30
+  duration_hours: 4
+  start_offset_days: 7
+  start_time: "18:00"
+  description: "职业战队邀请赛，现场大屏 + 解说。"
+  signals: {}
+
+- title: "悉尼动漫展 Cosplay 嘉年华"
+  category: anime             # 硬排除类别
+  venue: "ICC Sydney"
+  suburb: "Darling Harbour"
+  url: "https://example.com/events/anime-cosplay-carnival"
+  price_per_person: 35
+  duration_hours: 5
+  start_offset_days: 8
+  start_time: "12:00"
+  description: "全年最大规模动漫展，Cosplay 巡游与周边市集。"
+  signals: {}
+
+- title: "直升机悉尼港湾游览"
+  category: experience         # 超预算剔除（500 > budget_per_person_aud 120）
+  venue: "Sydney Heliport"
+  suburb: "Rosebery"
+  url: "https://example.com/events/harbour-helicopter-tour"
+  price_per_person: 500
+  duration_hours: 0.5
+  start_offset_days: 10
+  start_time: "09:00"
+  description: "空中俯瞰歌剧院与海港大桥，人均价格远超预算。"
+  signals:
+    interaction: "spectate_shared"
+    distance_km: 8
+
+- title: "蓝山一日游＋缆车体验"
+  category: daytrip            # 超距离剔除（120km > max_distance_km 40）
+  venue: "Scenic World"
+  suburb: "Katoomba"
+  url: "https://example.com/events/blue-mountains-daytrip"
+  price_per_person: 80
+  duration_hours: 6
+  start_offset_days: 6
+  start_time: "08:00"
+  description: "三姐妹峰 + 世界最陡缆车，往返车程较远。"
+  signals:
+    interaction: "light_participate"
+    distance_km: 120
+
+- title: "猎人谷热气球日出之旅"
+  category: nature             # 超距离剔除（160km > max_distance_km 40）
+  venue: "Hunter Valley"
+  suburb: "Pokolbin"
+  url: "https://example.com/events/hunter-valley-balloon"
+  price_per_person: 90
+  duration_hours: 4
+  start_offset_days: 13
+  start_time: "09:00"
+  description: "日出热气球 + 酒庄早餐，车程约两小时。"
+  signals:
+    interaction: "spectate_shared"
+    distance_km: 160

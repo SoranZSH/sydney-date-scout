@@ -1,0 +1,12 @@
+# 悉尼约会提案助理 —— cron 部署模板
+#
+# 每天触发一次；是否真正执行由程序内部的 interval_days 间隔守卫决定
+# （--respect-interval 会在未满 3 天时直接跳过），所以哪怕 cron 每天触发也不会重复推送。
+#
+# 使用方法：
+#   1. 把下面的路径 /path/to/date-scout 换成实际部署路径
+#   2. 把 SMTP_USER / SMTP_PASSWORD 写进同目录的 .env，并在下面用 `env` 加载，
+#      或者直接在系统级环境变量里配置
+#   3. cp deploy/crontab.example /tmp/ct && crontab /tmp/ct
+
+0 9 * * * cd /path/to/date-scout && /usr/bin/env $(cat .env | xargs) /usr/bin/python3 run.py run --respect-interval >> data/out/cron.log 2>&1

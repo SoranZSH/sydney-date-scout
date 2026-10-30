@@ -1,0 +1,230 @@
+# ==========================================================
+# 采集源清单（声明式）。新增一个源 = 加一段 YAML，不用改代码。
+#
+# type: rss | ics | json | astro | fixtures
+# 合规：只使用站点公开提供的 feed / API；遵守 robots.txt 与各站服务条款，
+#       每源默认 1 秒延时。需登录或明令禁止抓取的站点请勿开启。
+#
+# ⚠ 下面的真实站点 URL 会随站点改版失效。首次使用请先运行：
+#       python run.py check-sources
+#   把返回 ✗ 的源改成正确地址或 enabled:false。
+#   defaults 里可以补上该源普遍成立的评分信号（如场馆的噪音水平、周边餐饮）。
+# ==========================================================
+sources:
+
+  # ---------- 离线演示源：让 MVP 立刻可跑通 ----------
+  # 真实源接通后应设为 false，否则样例数据会混进真实推荐里。
+  - id: demo_fixtures
+    type: fixtures
+    enabled: false
+    path: fixtures/sample_events.yaml
+
+  # ---------- 主力真实源 ----------
+  # 悉尼市政府官方活动库。目前唯一能同时给出真实开始时间 + 价格 + 场馆经纬度的公开源，
+  # 评分需要的 7 个维度里能真实填满 6 个（只有新鲜感需要靠场次跨度推断）。
+  # robots.txt 明确 Allow: /?time=*，并公开 sitemap；只读页面内嵌的 __NEXT_DATA__。
+  - id: city_of_sydney_whatson
+    type: cityofsydney
+    enabled: true
+    # 四个列表页合起来覆盖整个推荐窗口。只取 this-week + next-week 是不够的：
+    # 列表按最近一场排序，前几十条会被「今天正在展出的常设展」占满，
+    # 真正适合约会的周末市集/工作坊排在后面，永远抓不到详情页。
+    # 实测：只抓 60 条时 0 条过线，覆盖完整窗口后有 9 条过线。
+    list_urls:
+      - "https://whatson.cityofsydney.nsw.gov.au/?time=this-week"
+      - "https://whatson.cityofsydney.nsw.gov.au/?time=next-week"
+      - "https://whatson.cityofsydney.nsw.gov.au/?time=this-month"
+      - "https://whatson.cityofsydney.nsw.gov.au/"
+    max_detail_fetches: 200    # 每轮最多抓多少个详情页（每个约 1 秒，整轮约 3 分钟）
+    category_hint: experience
+
+  # ---------- 官方活动页 / 政府 ----------
+  # （City of Sydney 已改用上面的专用采集器，这里不再需要 rss 条目：
+  #   /rss 实测 404，该站从来没提供过 RSS。）
+
+  - id: destination_nsw_events
+    type: rss
+    enabled: false          # 实测 404；该站只有 /articles.xml 和 /rss.xml，且都是资讯流
+    url: "https://www.sydney.com/rss.xml"
+    category_hint: festival
+
+  # ---------- 场馆 ----------
+  - id: sydney_opera_house
+    type: rss
+    enabled: false
+    url: "https://www.sydneyoperahouse.com/rss/whats-on.xml"
+    category_hint: performance
+    default_venue: "Sydney Opera House"
+    default_suburb: "CBD"
+    defaults: {noise_level: "quiet", has_seating: true, photogenic: true,
+               interaction: "spectate_silent", nearby_food_options: true}
+
+  - id: art_gallery_nsw
+    type: rss
+    enabled: false
+    url: "https://www.artgallery.nsw.gov.au/whats-on/rss"
+    category_hint: exhibition
+    default_venue: "Art Gallery of NSW"
+    default_suburb: "CBD"
+    defaults: {noise_level: "quiet", photogenic: true, interaction: "spectate_shared"}
+
+  - id: mca_australia
+    type: ics
+    enabled: false
+    url: "https://www.mca.com.au/calendar.ics"
+    category_hint: exhibition
+    default_suburb: "The Rocks"
+
+  # ---------- 票务平台 ----------
+  - id: eventbrite_sydney
+    type: json
+    enabled: false
+    url: "https://www.eventbriteapi.com/v3/events/search/?location.address=sydney&expand=venue"
+    headers: {Authorization: "Bearer ${EVENTBRITE_TOKEN}"}
+    items_path: "events"
+    field_map:
+      title: "name.text"
+      description: "description.text"
+      start: "start.local"
+      end: "end.local"
+      source_url: "url"
+      booking_url: "url"
+      venue_name: "venue.name"
+      suburb: "venue.address.city"
+    category_hint: experience
+
+  # ---------- 商场 / 商业场馆（新场馆、快闪、节庆布置）----------
+  - id: westfield_sydney_events
+    type: rss
+    enabled: false
+    url: "https://www.westfield.com.au/sydney/whats-on/rss"
+    category_hint: venue
+    default_venue: "Westfield Sydney"
+    default_suburb: "CBD"
+    defaults: {noise_level: "moderate", has_seating: true, nearby_food_options: true}
+
+  - id: barangaroo_precinct_events
+    type: rss
+    enabled: false
+    url: "https://www.barangaroo.com/whats-on/rss"
+    category_hint: venue
+    default_suburb: "Barangaroo"
+    defaults: {photogenic: true, nearby_food_options: true}
+
+  # ---------- 折扣平台（快闪特价 / 品牌大促，命中 sale 类别）----------
+  - id: scoopon_sydney_deals
+    type: rss
+    enabled: false
+    url: "https://www.scoopon.com.au/sydney/rss"
+    category_hint: sale
+
+  - id: groupon_sydney_deals
+    type: json
+    enabled: false
+    url: "https://www.groupon.com.au/api/deals?division=sydney"
+    items_path: "deals"
+    field_map:
+      title: "title"
+      description: "highlightedDealText"
+      start: "dealStartDate"
+      end: "dealEndDate"
+      source_url: "dealUrl"
+      price_per_person: "options.0.price.amount"
+    category_hint: sale
+
+  # ---------- 体育赛事 ----------
+  - id: scg_trust_events
+    type: rss
+    enabled: false
+    url: "https://www.scgtrust.com.au/whats-on/rss"
+    category_hint: sport
+    default_venue: "Sydney Cricket Ground"
+    default_suburb: "Moore Park"
+    defaults: {noise_level: "loud", has_seating: true, evening_or_weekend: true, interaction: "spectate_shared"}
+
+  - id: sydney_fc_fixtures
+    type: json
+    enabled: false
+    url: "https://api.sydneyfc.com/v1/fixtures?season=current"
+    items_path: "fixtures"
+    field_map:
+      title: "matchTitle"
+      description: "competition"
+      start: "kickOffLocal"
+      source_url: "ticketUrl"
+      venue_name: "venue.name"
+    category_hint: sport
+    default_suburb: "Moore Park"
+
+  # ---------- 公开社交媒体（官方 API，需自行申请 token；不要抓需要登录的页面）----------
+  - id: meetup_sydney_public
+    type: json
+    enabled: false
+    url: "https://api.meetup.com/find/upcoming_events?lat=-33.8688&lon=151.2093&radius=20"
+    headers: {Authorization: "Bearer ${MEETUP_API_TOKEN}"}
+    items_path: "events"
+    field_map:
+      title: "name"
+      description: "description"
+      start: "local_date"
+      source_url: "link"
+      venue_name: "venue.name"
+    category_hint: experience
+    # Meetup 上的兴趣社群活动大多是单人向，命中 verify.py 的 SOLO_ORIENTED_KEYWORDS
+    # 会被自动降权（不剔除），符合「降低更适合独自参加项目权重」的要求。
+
+  # ---------- 本地媒体（用于交叉验证 + 讨论热度计数）----------
+  # ⚠ 这两个 feed URL 是活的（实测 200 + 合法 RSS），但**故意保持关闭**：
+  # 它们是编辑部资讯流，条目只有文章发布时间，没有活动开始时间。
+  # 通用 rss 采集器会把 published 当作 start，于是每一条都在核验阶段被判「已过期」
+  # ——实测接入后 110 条全军覆没，0 条可用，只是白白拖慢每轮运行。
+  # 要让它们发挥「交叉验证 + 热度计数」的作用，需要先写一个能从正文里
+  # 抽取活动日期的专用适配器，而不是直接开开关。
+  - id: timeout_sydney
+    type: rss
+    enabled: false
+    url: "https://www.timeout.com/sydney/feed.rss"
+    category_hint: experience
+
+  - id: broadsheet_sydney
+    type: rss
+    enabled: false
+    url: "https://www.broadsheet.com.au/sydney/rss"
+    category_hint: food
+
+  - id: concrete_playground_sydney
+    type: rss
+    enabled: false          # 同上：资讯流，无活动开始时间
+    url: "https://concreteplayground.com/sydney/feed"
+    category_hint: experience
+
+  # ---------- 天文 / 自然（本地静态表，每年更新一次）----------
+  - id: astronomy_calendar
+    type: astro
+    enabled: true
+    events:
+      # 把当年的流星雨/满月/超级月亮日期填在这里（示例，请按年更新）
+      - title: "英仙座流星雨观测夜（悉尼可见时段）"
+        start: "2026-08-13 22:30"
+        duration_hours: 3
+        price_per_person: 0
+        venue: "Palm Beach 灯塔观测点"
+        suburb: "Palm Beach"
+        url: "https://www.sydneyobservatory.com.au/"
+        description: "远离光污染的海岬观测点，带野餐垫与保温杯。"
+        signals:
+          first_time_in_city: false
+          is_annual_repeat: true
+          has_new_content: false
+          window_days: 2
+          total_sessions: 2
+          media_mentions: 3
+          noise_level: "quiet"
+          has_seating: true
+          photogenic: true
+          evening_or_weekend: true
+          nearby_food_options: false
+          interaction: "spectate_shared"
+          transit_minutes: 55
+          transit_transfers: 2
+          distance_km: 35

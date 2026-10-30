@@ -1,0 +1,9 @@
+# 运行时数据与产物（不进版本库）
+data/
+dist/
+build/
+__pycache__/
+*.pyc
+.claude/
+# 本机配置含邮箱授权码等敏感信息，只跟踪 config.example.yaml
+config.yaml
