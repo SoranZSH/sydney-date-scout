@@ -51,7 +51,17 @@ CREATE TABLE IF NOT EXISTS feedback (
     series_key TEXT NOT NULL,
     uid TEXT,
     title TEXT,
+    category TEXT,
     verdict TEXT NOT NULL,              -- like | dislike
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS behavior (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,                 -- view | open_link（like/dislike 记在 feedback）
+    series_key TEXT NOT NULL,
+    uid TEXT,
+    title TEXT,
+    category TEXT,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sent_uid ON sent_history(uid);
@@ -96,6 +106,10 @@ class Store:
             name = col.split()[0]
             if name not in cols:
                 self.db.execute(f"ALTER TABLE sent_history ADD COLUMN {col}")
+
+        fb_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(feedback)")}
+        if fb_cols and "category" not in fb_cols:
+            self.db.execute("ALTER TABLE feedback ADD COLUMN category TEXT")
 
         # v1.2.0：给历史推送记录回填 series_key，这样「同一系列最多推 N 次」
         # 从升级那一刻起就把过去 22 批次的重复历史算进去，而不是从零开始。
@@ -186,10 +200,12 @@ class Store:
 
     # ---------- 用户反馈（v1.2.0）----------
     def add_feedback(self, title: str, venue: str, verdict: str,
-                     uid: Optional[str] = None) -> None:
+                     uid: Optional[str] = None, category: Optional[str] = None) -> None:
         self.db.execute(
-            "INSERT INTO feedback (series_key, uid, title, verdict, created_at) VALUES (?,?,?,?,?)",
-            (series_key(title, venue), uid, title, verdict, datetime.now().isoformat()),
+            "INSERT INTO feedback (series_key, uid, title, category, verdict, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (series_key(title, venue), uid, title, category, verdict,
+             datetime.now().isoformat()),
         )
         self.db.commit()
 
@@ -200,6 +216,54 @@ class Store:
             (series_key(title, venue),),
         ).fetchone()
         return row["verdict"] if row else None
+
+    # ---------- 行为日志 / 学习数据（v1.3.0）----------
+    def log_behavior(self, kind: str, title: str, venue: str,
+                     uid: Optional[str] = None, category: Optional[str] = None) -> None:
+        self.db.execute(
+            "INSERT INTO behavior (kind, series_key, uid, title, category, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (kind, series_key(title, venue), uid, title, category,
+             datetime.now().isoformat()),
+        )
+        self.db.commit()
+
+    def behavior_counts(self) -> list[sqlite3.Row]:
+        """类别 × 行为种类 的计数（feedback 的 like/dislike 也并进来），
+        给 personalize.category_affinity 用。"""
+        return self.db.execute(
+            "SELECT category, kind, COUNT(*) AS cnt FROM ("
+            "  SELECT category, kind FROM behavior"
+            "  UNION ALL"
+            "  SELECT category, verdict AS kind FROM feedback"
+            ") GROUP BY category, kind",
+        ).fetchall()
+
+    def training_samples(self) -> list[tuple[dict, int]]:
+        """给 datefit.train 用：每个系列取最近一次 👍/👎 作标签，
+        特征字段优先从 events 缓存取完整 payload，取不到就只用标题。"""
+        rows = self.db.execute(
+            "SELECT f.series_key, f.title, f.uid, f.category, f.verdict,"
+            "       e.payload AS epayload "
+            "FROM feedback f LEFT JOIN events e ON e.uid = f.uid "
+            "ORDER BY f.id",
+        ).fetchall()
+        latest: dict[str, tuple[dict, int]] = {}
+        for r in rows:
+            fields: dict = {"title": r["title"] or "", "category": r["category"] or ""}
+            if r["epayload"]:
+                try:
+                    p = json.loads(r["epayload"])
+                    fields.update(
+                        description=p.get("description") or "",
+                        category=p.get("category") or fields["category"],
+                        venue_name=p.get("venue_name") or "",
+                        price_per_person=p.get("price_per_person"),
+                    )
+                except json.JSONDecodeError:
+                    pass
+            latest[r["series_key"]] = (fields, 1 if r["verdict"] == "like" else 0)
+        return list(latest.values())
 
     # ---------- 批次 ----------
     def create_batch(self, events: list[Event], rubric_version: str,

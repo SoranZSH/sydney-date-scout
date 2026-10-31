@@ -197,6 +197,50 @@ def cmd_test_email(args) -> int:
         return 1
 
 
+def cmd_train_datefit(args) -> int:
+    """Track A：用 GUI 里点出来的 👍/👎 标签训练内容判别模型。"""
+    from scout import datefit
+
+    cfg = load_config(args.config)
+    store = Store(db_path(cfg))
+    samples = store.training_samples()
+    n_pos = sum(y for _, y in samples)
+    n_neg = len(samples) - n_pos
+    if len(samples) < args.min_labels or n_pos < 5 or n_neg < 5:
+        print(f"标签还不够：共 {len(samples)} 条（👍 {n_pos} / 👎 {n_neg}）。")
+        print(f"建议攒到 ≥{args.min_labels} 条、且两类各 ≥5 条再训练，"
+              "平时多在桌面程序里点 👍/👎。")
+        return 1
+    model = datefit.train(samples)
+    path = datefit.personal_model_path(cfg)
+    datefit.save_model(model, path)
+    print(f"训练完成：{len(samples)} 条标签（👍 {n_pos} / 👎 {n_neg}），"
+          f"训练集准确率 {model['train_acc']:.0%}")
+    print(f"个人模型已保存：{path}（下轮运行自动生效）")
+    if args.freeze:
+        fpath = datefit.frozen_model_path(cfg)
+        datefit.save_model(model, fpath)
+        print(f"已冻结为冷启动模型：{fpath}")
+        print("它会随仓库分发给其他用户。记得 git add models/datefit.json 并提交。")
+    return 0
+
+
+def cmd_affinity(args) -> int:
+    """Track B：打印当前的类别亲和度（个性化是可解释的，随时能看）。"""
+    from scout.personalize import category_affinity
+
+    cfg = load_config(args.config)
+    store = Store(db_path(cfg))
+    aff = category_affinity(store)
+    if not aff:
+        print("还没有行为数据（查看/点链接/👍/👎 都会累积）。")
+        return 0
+    print("类别亲和度（-1 到 +1，影响批内排序，不影响分数）：")
+    for cat, a in sorted(aff.items(), key=lambda kv: -kv[1]):
+        print(f"  {cat:<12} {a:+.2f}")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="悉尼约会提案助理")
     p.add_argument("-c", "--config", default=DEFAULT_CFG)
@@ -225,6 +269,15 @@ def main() -> int:
     h.set_defaults(func=cmd_history)
 
     sub.add_parser("test-email", help="诊断 SMTP 连通性并发一封测试邮件").set_defaults(func=cmd_test_email)
+
+    t = sub.add_parser("train-datefit", help="用 👍/👎 标签训练内容判别模型（Track A）")
+    t.add_argument("--min-labels", type=int, default=30, help="最少标签数（默认 30）")
+    t.add_argument("--freeze", action="store_true",
+                   help="同时冻结到 models/datefit.json 作为随仓库分发的冷启动模型")
+    t.set_defaults(func=cmd_train_datefit)
+
+    sub.add_parser("affinity", help="查看类别亲和度（Track B 个性化，当前状态）"
+                   ).set_defaults(func=cmd_affinity)
 
     args = p.parse_args()
     _setup_log(args.verbose)

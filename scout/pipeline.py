@@ -10,6 +10,7 @@ from typing import Any, Optional
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from . import datefit, personalize
 from .collectors import get_collector
 from .config import db_path, resolve_env
 from .dedupe import dedupe_events
@@ -129,7 +130,31 @@ def run_once(cfg: dict, dry_run: bool = False, check_urls: bool = False,
         else:
             below_threshold.append(e.total)
 
+    # ---- Track A：内容判别模型（v1.3.0，模型文件存在才生效）----
+    # 作用在筛选层：rubric 分数不动，只是把模型认为「没价值」的拦在推送之外。
+    datefit_dropped = 0
+    model = datefit.load_model(cfg)
+    if model:
+        min_p = cfg.get("datefit", {}).get("min_p", 0.35)
+        kept: list[Event] = []
+        for e in qualifying:
+            p = datefit.predict_event(model, e)
+            e.scores["_datefit"] = round(p, 3)
+            if p < min_p:
+                datefit_dropped += 1
+            else:
+                kept.append(e)
+        qualifying = kept
+
     qualifying.sort(key=lambda e: e.total, reverse=True)
+
+    # ---- Track B：个性化（v1.3.0）——只调批内排序，不改分数/阈值/剔除 ----
+    bonuses = personalize.rank_bonuses(
+        store, enabled=cfg.get("personalization", {}).get("enabled", True))
+    if bonuses:
+        qualifying.sort(key=lambda e: e.total + bonuses.get(e.category, 0.0),
+                        reverse=True)
+
     max_items = rubric["thresholds"]["max_items"]
     resend_days = cfg.get("resend_after_days", 30)
     series_max = cfg.get("series_max_sends", 3)
@@ -222,6 +247,8 @@ def run_once(cfg: dict, dry_run: bool = False, check_urls: bool = False,
         "vetoed": vetoed,
         "skipped_recent": skipped_recent,
         "skipped_diversity": skipped_diversity,
+        "datefit_dropped": datefit_dropped,
+        "personalized_categories": len(bonuses),
         "output_file": output_file,
         "sent": sent,
         "errors": errors,

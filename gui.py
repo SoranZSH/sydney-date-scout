@@ -32,6 +32,11 @@ MUTED = "#8a8a8a"
 
 FONT = "Microsoft YaHei UI"
 
+CAT_ZH = {"film": "电影", "performance": "演出", "exhibition": "展览",
+          "festival": "节庆", "market": "市集", "food": "美食", "venue": "场所",
+          "experience": "体验", "sport": "运动", "nature": "自然",
+          "sale": "折扣", "daytrip": "短途"}
+
 
 class ScoutApp(tk.Tk):
     def __init__(self, config_path: str):
@@ -103,6 +108,7 @@ class ScoutApp(tk.Tk):
         sb.pack(side="right", fill="y")
         self.event_list.config(yscrollcommand=sb.set)
         self.event_list.bind("<<ListboxSelect>>", lambda _e: self._on_event_select())
+        self.event_list.bind("<Double-Button-1>", lambda _e: self._open_current_link())
 
         # 右：详情
         right = tk.Frame(main, bg=BG)
@@ -202,7 +208,15 @@ class ScoutApp(tk.Tk):
 
         self.event_list.delete(0, "end")
         for ev in self.current_events:
-            self.event_list.insert("end", f"  {ev.get('total', 0):>5.1f}   {ev.get('title', '')}")
+            day = "--"
+            if ev.get("start"):
+                try:
+                    day = datetime.fromisoformat(ev["start"]).strftime("%m-%d")
+                except ValueError:
+                    pass
+            tag = CAT_ZH.get(ev.get("category", ""), "其他")
+            self.event_list.insert(
+                "end", f" {ev.get('total', 0):>5.1f}  {day}  {tag}  {ev.get('title', '')}")
         if self.current_events:
             self.event_list.selection_set(0)
             self._on_event_select()
@@ -216,6 +230,29 @@ class ScoutApp(tk.Tk):
         self.current_event = self.current_events[sel[0]]
         self._render_event(self.current_event)
         self._refresh_feedback_label()
+        self._log_behavior("view", self.current_event)
+
+    # ------------------------------------------------------- 行为日志（v1.3.0）
+    def _log_behavior(self, kind: str, ev: dict) -> None:
+        """查看/点链接都是个性化（Track B）的学习信号，静默记录，失败不打扰。"""
+        try:
+            store = self._store()
+            try:
+                store.log_behavior(kind, ev.get("title", ""), ev.get("venue_name", ""),
+                                   ev.get("uid"), ev.get("category"))
+            finally:
+                store.close()
+        except Exception:                                  # noqa: BLE001
+            pass
+
+    def _open_current_link(self) -> None:
+        ev = getattr(self, "current_event", None)
+        if not ev:
+            return
+        url = ev.get("booking_url") or ev.get("source_url")
+        if url:
+            webbrowser.open(url)
+            self._log_behavior("open_link", ev)
 
     # ------------------------------------------------------- 反馈（v1.2.0）
     def _refresh_feedback_label(self) -> None:
@@ -239,7 +276,7 @@ class ScoutApp(tk.Tk):
         store = self._store()
         try:
             store.add_feedback(ev.get("title", ""), ev.get("venue_name", ""),
-                               verdict, ev.get("uid"))
+                               verdict, ev.get("uid"), ev.get("category"))
         finally:
             store.close()
         self._refresh_feedback_label()
@@ -302,6 +339,9 @@ class ScoutApp(tk.Tk):
                 zh = {"solo_oriented": "单人向", "community_venue": "社区场地"}
                 parts = [f"{zh.get(k, k)} ×{v}" for k, v in scores["_modifier"].items()]
                 d.insert("end", f"　（降权：{'、'.join(parts)}）\n", "dim")
+            if "_datefit" in scores:
+                d.insert("end",
+                         f"　内容判别模型 P(有价值) = {scores['_datefit']}\n", "dim")
 
         # ---- 约会方案 ----
         if plan.get("timeline"):
@@ -343,7 +383,11 @@ class ScoutApp(tk.Tk):
             tag = f"link_{abs(hash(url))}"
             d.tag_add(tag, start_idx, end_idx)
             d.tag_configure(tag, foreground="#2a6fb5", underline=True)
-            d.tag_bind(tag, "<Button-1>", lambda _e, u=url: webbrowser.open(u))
+
+            def _click_link(_e, u=url, event=ev):
+                webbrowser.open(u)
+                self._log_behavior("open_link", event)
+            d.tag_bind(tag, "<Button-1>", _click_link)
             d.tag_bind(tag, "<Enter>", lambda _e: d.config(cursor="hand2"))
             d.tag_bind(tag, "<Leave>", lambda _e: d.config(cursor="arrow"))
 

@@ -15,6 +15,20 @@ send_when_empty: true     # 无达标项目时仍发一封「本次无推荐」�
 # 追加自定义排除词（纯子串匹配，命中即剔除；内置的儿童/志愿者/老年规则见 scout/verify.py）
 exclude_keywords: []
 #  - "pub crawl"
+
+# ---------- 双轨学习（v1.3.0）----------
+# Track A：内容判别模型。在 GUI 里攒 👍/👎 标签，够 30 条后
+#   python run.py train-datefit            # 训练个人模型（data/datefit-model.json）
+#   python run.py train-datefit --freeze   # 冻结到 models/datefit.json，随仓库分发（冷启动）
+# 模型文件不存在时此环节自动跳过，行为与旧版完全一致。
+datefit:
+  enabled: true
+  min_p: 0.35        # 模型判定 P(有价值) 低于此值不推送
+
+# Track B：个性化。由查看/点链接/👍/👎 行为缓慢累积类别亲和度，
+# 只影响批内排序，不改分数、阈值与剔除。python run.py affinity 可随时查看。
+personalization:
+  enabled: true
 require_price: true       # 价格未知的条目直接剔除（宁缺毋滥）
 dedupe_threshold: 0.82
 
