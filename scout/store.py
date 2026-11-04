@@ -209,6 +209,15 @@ class Store:
         )
         self.db.commit()
 
+    def clear_feedback(self, title: str, venue: str) -> None:
+        """撤销该系列的全部反馈（GUI 里再点一次 👍/👎 即撤销）。
+
+        v1.3.1 之前「不再推这类」是永久且不可撤的——误点的代价太高，
+        用户会因此不敢点，反馈闭环就死了。可撤销是反馈按钮敢被点的前提。"""
+        self.db.execute("DELETE FROM feedback WHERE series_key=?",
+                        (series_key(title, venue),))
+        self.db.commit()
+
     def feedback_for(self, title: str, venue: str) -> Optional[str]:
         """返回该系列最近一次反馈（like/dislike），没有则 None。"""
         row = self.db.execute(
