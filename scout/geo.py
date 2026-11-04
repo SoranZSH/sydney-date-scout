@@ -27,7 +27,6 @@ SUBURB_COORDS: dict[str, tuple[float, float]] = {
     "ultimo": (-33.8797, 151.1975),
     "barangaroo": (-33.8637, 151.2010),
     "the rocks": (-33.8599, 151.2090),
-    "burwood": (-33.8774, 151.1037),
     "chatswood": (-33.7969, 151.1803),
     "parramatta": (-33.8150, 151.0011),
     "bondi": (-33.8915, 151.2767),

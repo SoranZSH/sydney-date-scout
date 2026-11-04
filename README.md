@@ -1,448 +1,211 @@
-# 悉尼约会提案助理 (Sydney Date Scout)
+# 悉尼约会助理 · Sydney Date Scout
 
-每 3 天自动采集悉尼的活动信息，去重核验后按**固定绝对锚点**评分，达到推荐线的项目连同**可直接执行的约会方案**一起**弹窗提示**，随时可以打开桌面程序翻看当前推荐与历史记录。
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-37%20passed-87a070)
+![GUI deps](https://img.shields.io/badge/GUI%20依赖-0-a93a4c)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-4e4266)
+![License](https://img.shields.io/badge/license-MIT-cc7d8a)
 
-核心约束：**分数跨批次可比**。同一个活动在任何日期、任何批次、无论同期竞品强弱，得分完全一致；达标的少就少推，一个都不达标就弹一个「本次无推荐」的说明，不降低标准凑数。
+**每 3 天替你逛一遍悉尼的活动，只把「值得为它安排一次约会」的挑出来，并把怎么约都想好。**
 
----
+桌面程序 + 定时任务，本地运行。活动按固定的绝对锚点评分，分数跨批次可比；达标的少就少推，一个都没有就直说「本次无推荐」，从不降低标准凑数。每条推荐附带碰头时间、续摊去处、预算拆解、雨天备选和聊天话题。你的 👍/👎 和浏览行为会让它慢慢更懂你。
 
-## v1.2.0（2026-10-30）：补上「像不像约会」这道闸门
+![桌面程序：推荐列表与评分详情](docs/images/gui.png)
 
-v1.1.0 真实运行三个月（22 批次 201 条推送）后复盘，发现推荐被社区中心课程、
-图书馆活动、儿童假期营、志愿者培训占据 —— 免费+动手+周末恰好是旧评分表的
-满分模板，而七个维度没有一个在问「这像约会吗」。本版修复（回放旧数据验证：
-201 条里 55% 会被新规则拦下）：
+<p align="center"><img src="docs/images/notifier.png" width="420" alt="有新推荐时的弹窗"></p>
 
-| 改动 | 位置 | 效果 |
-|---|---|---|
-| 约会适配闸门 | `verify.py` | 儿童/青少年/老年/志愿者/社区例行项目直接剔除（回放拦下 9%） |
-| 停止折叠分类 | `cityofsydney.py` | children-and-family→`family`、community-and-causes→`community`，并硬排除 |
-| 社区场地降权 ×0.8 | `rubric.yaml` v1.2.0 | 社区中心/图书馆场地不剔除但打八折（回放拦下 26%） |
-| 系列级防重复 | `store.py` | 冷却与 `series_max_sends`（默认 3 次）按「标题+场地」算，周期课不再每场算新活动（回放拦下 20% 重复） |
-| 品类多样性 | `pipeline.py` | 单批次每类别最多 `max_per_category`（默认 3）条 |
-| 反馈闭环 | `gui.py` | 每条推荐可点「👍 感兴趣 / 👎 不再推这类」，👎 的系列永久不再推 |
+### 亮点
 
-新配置项（都有默认值，不改 config.yaml 也能跑）：`series_max_sends`、
-`max_per_category`、`exclude_keywords`。数据库升级自动完成（新表 `feedback`、
-`sent_history.series_key` 回填）。推送量会明显变少 —— 这是设计目标：
-三条真值得去的，好过十条凑数的。
-
-## v1.3.0（2026-10-31）：双轨学习脚手架
-
-| 轨道 | 是什么 | 怎么用 |
-|---|---|---|
-| **Track A 内容判别**（`scout/datefit.py`） | 用 GUI 里点的 👍/👎 训练「这条信息有没有价值」的判别模型（纯 Python 逻辑回归+特征哈希，零依赖）。作用在筛选层，rubric 分数不动 | 攒够 30+ 标签后 `python run.py train-datefit`；满意后加 `--freeze` 固化到 `models/datefit.json` 随仓库分发，成为发布后其他用户的**冷启动模型**。模型不存在时自动跳过 |
-| **Track B 个性化**（`scout/personalize.py`） | 查看/点链接/👍/👎 自动累积类别亲和度（新表 `behavior`），**只调批内排序**，不改分数、阈值、剔除；有平滑伪计数，刻意慢 | 自动生效；`python run.py affinity` 随时查看当前画像。开源后每个用户的 db 在本地，各自演化 |
-
-GUI 顺带小修：列表显示日期+类别、双击打开订票链接、详情页显示模型判定值。
-实测提示：约 40 条标签时交叉验证准确率 ~62%（方向正确但还嫩），标签过百后再
-`--freeze` 比较稳妥；`datefit.min_p` 默认 0.35 故意宽松，不成熟的模型只会
-剪掉最明显的差条目。
-
-## v1.3.1（2026-10-31）：UI 专项改版
-
-复盘指出「UI 交互很差劲」后做的一次性整改。先把两难选择定下来：**要现代观感，
-但不破坏「纯标准库、单文件 exe」的底线**。参考了 GitHub 上三条主流路线 ——
-ttkbootstrap 与 CustomTkinter 观感最好但都要引第三方依赖（排除）；
-Sun-Valley-ttk-theme 证明了不引 Python 依赖也能做出扁平现代观感。最终照它的
-思路自绘扁平组件（`FlatButton`、卡片、toast），依赖数保持为零。
-
-| 角度 | 改动 |
-|---|---|
-| 美观 | Listbox 文本行 → 卡片式列表（分数色带徽标：≥80 绿 / 达标橙；标题+日期·类别·区域·价格两行，超长省略号）；详情页固定头部（大分数、信息 chips、标题自动换行）；七维度得分从文字墙改为**条形图**（嵌入 Canvas，颜色按分档） |
-| 交互 | 👍/👎 变为**可撤销**的开关态按钮（再点一次撤销，`store.clear_feedback`）——不可撤的永久拉黑会让人不敢点，反馈闭环就死了；打断式 messagebox 改为 **toast** 轻提示；↑↓ 键切换活动、回车开订票页；滚轮滚动卡片列表；批次 ‹ › 快速翻页 |
-| 易用性 | 新增**类别过滤**下拉；活动卡与详情页都有**倒计时**（就在今天/明天、仅剩 N 天、N 天后、已结束）；抓取时顶栏进度条 + 按钮态；空状态有引导文案 |
-| 粘性 | 新增**「复制约会方案」**：一键把时间/地点/安排/预算/链接拼成可直接粘贴发给对方的文本（这也是 +1.5 的强意向信号，进 Track B）；新增**「口味画像」**面板：类别亲和度正负条形图 + 👍/👎 标注进度条（n/30，攒够提示可训练）——把 v1.3.0 只能在命令行看的学习系统摊开给用户，看得见成长才有持续标注的动力 |
-
-弹窗通知（`scout/notifier.py`）同步换成同一套设计语言：分数色带、时间/场地副行、
-「就在今天/明天」提示、扁平按钮。行为与四层防重弹保障完全不变。
-配套：`store.clear_feedback()`（撤销反馈）、`personalize.SIGNAL_WEIGHTS` 新增
-`copy_plan: +1.5`。改动全部在 UI/交互层，rubric、阈值、评分一个字节没动。
-
-## v1.4.0（2026-10-31）：「夜约」视觉重塑
-
-v1.3.1 修的是信息架构与交互，但配色沿用了初版的陶土橙——复盘结论：
-**土黄色 + 系统感组件对一个恋爱辅助工具是性缩力**。本版定调「有荷尔蒙、
-但性别中立」：参考 Tinder（橙粉渐变）/ Hinge（深紫）/ Feeld（暗夜底）
-等恋爱产品的共同语言，落在**暗夜墨紫底 + 玫瑰粉主色 + 玫瑰→紫罗兰渐变**。
-暗色底还有个工程红利：tkinter 原生组件的年代感在深色里几乎不可见。
-
-| 改动 | 做法 |
-|---|---|
-| 设计令牌集中化 | 新增 `scout/theme.py`：全部颜色、`band_color`、渐变绘制、暗色标题栏，GUI 与弹窗共用，改色只改一处 |
-| 渐变头部 | Canvas 逐线画玫瑰→紫罗兰横向渐变（零图片资源），主界面与弹窗共用 |
-| 去 WinXP 感三件套 | ① Combobox 全部移除：批次改为自绘下拉（暗色 `tk.Menu`）+ ‹ › 翻页，类别改为**胶囊 chip**（选中玫瑰色，自动流式换行）② 滚动条重写 ttk layout，去掉上下箭头只留 8px 细滑块 ③ Windows 标题栏调成暗色（`DwmSetWindowAttribute`，旧系统静默跳过） |
-| 暗色适配 | 卡片/详情/条形图/口味画像/toast（暗底上用亮色托斯特）全套重调；分数色带改为 绿 #4ccb8a / 玫瑰 #f4506e / 灰 |
-
-仍然零第三方依赖，`build_exe.spec` 无需改动。行为层与 v1.3.1 完全一致。
-
-## v1.4.1（2026-10-31）：「胭脂黛」—— 中国传统色重调
-
-v1.4.0 的玫瑰紫渐变复盘结论：**媚俗**，太「APP 商店风」。本版从中国传统色
-体系取色，走「低明度、雅俗共赏」：主题取意**眉黛朱唇** —— 黛（画眉的青黑）
-与胭脂（点唇的暗红）是古典浪漫意象里最经典的一对颜色，浪漫放在意象与
-层次里，不放在饱和度里。
-
-| 角色 | 传统色 | 落地值（按暗色界面可读性微调，原值注释在 theme.py） |
-|---|---|---|
-| 底 / 卡片 | 玄青压墨 / 黛 | `#22242e` / `#2b2e3a` |
-| 主色 | 胭脂（#9d2933） | `#a93a4c`，hover 回落原色向 |
-| 头部渐变 | 胭脂 → 黛紫（#574266） | `#8f2f3d → #4e4266`，两端都是暗色，只剩含蓄的色温变化 |
-| 文字 | 缟素 / 宣纸（缟 #f2ecde） | `#ece6da`；toast 用宣纸底墨字 |
-| 正向 / 高分 | 竹青（#789262） | `#87a070` |
-| 负向 | 赭（#955539） | `#ab6b56` |
-| 紧迫倒计时 | 琥珀（#ca6924） | `#bd8244` 压饱和 |
-
-改动集中在 `scout/theme.py`（这正是 v1.4.0 把令牌集中化的回报——换整套
-风格只动一个文件 + gui.py 四处局部色），组件与行为零变化。
-
-## v1.4.2（2026-10-31）：「胭脂桃夭」—— 桃花入色
-
-采纳「桃花也是古典浪漫之色」的意见：「桃之夭夭，灼灼其华」是诗经以来
-最正统的婚恋意象，理应入色。落法谨守低明度原则——**桃花只做胭脂的
-「亮声部」，绝不铺大面积底色**（铺满就回到糖果色的媚俗）：
-
-- 头部渐变改为 **胭脂 → 桃花**（`#8f2f3d → #cc7d8a`，桃红 #f47983 压暗）
-- 达标分数（68–79）的数字与中档维度条，由胭脂亮面改为**桃红** `PEACH #d98b95`
-- 选中卡底、头部状态文字，向桃色微移
-
-其余（玄青底、黛卡片、竹青、赭、琥珀、宣纸）不动。仅 `theme.py` 与
-gui.py 两处取色变化，组件与行为零变化。
+- **评分跨批次可比**：7 个维度全部用绝对锚点定义，打分函数只看活动本身，阈值固定 68 分。达标的少就少推，从不凑数。
+- **数据驱动的迭代**：每一版改动都有真实运行数据做依据。三个月 201 条推送复盘后上线「约会适配闸门」，用旧数据回放验证，拦下 55% 的不合格推荐。
+- **双轨学习**：👍/👎 训练的内容判别模型负责筛选，行为数据驱动的个性化负责排序。两者都刻意设计得慢、可解释，评分标准本身不受影响。
+- **从「找活动」到「怎么约」**：每条推荐附带时间线、预算拆解、雨天备选、聊天话题，一键复制就能发给对方。
+- **可接任意爬虫**：项目只定义数据契约，并附一段可以直接交给 AI Agent 的对接提示词，用自己选的爬虫工具就能跑通真实数据。
+- **零依赖桌面端**：纯标准库 tkinter 自绘界面，中国传统色「胭脂桃夭」主题，可打包为单文件 exe。
 
 ---
 
-## 1. 架构
+## 从生活烦恼到落地：一页看懂
+
+这个仓库同时是一份产品作品集。完整复盘见 **[docs/case-study.md](docs/case-study.md)**。
+
+| 阶段 | 关键判断 | 证据 / 结果 |
+|---|---|---|
+| **生活烦恼** | ① 上班族周末本就有限，却要花大量时间在十几个网站间整理零散信息、做计划；② 想约心仪的人出去，却只会「吃饭看电影」，总被吐槽没情调 | 两类人要的是同一件事：不用从零找，就能拿到靠谱、拿来即用的约会推荐 |
+| **需求分析** | 真正要的是「不用我想的时候，告诉我这个值得去，并且想好怎么约」。P0 是主动推送 + 可信筛选；「越用越懂我」排在可信之后 | 非功能需求：分数跨批次可比、宁可少推不凑数、无人值守不出错 |
+| **产品设计** | 七维度绝对锚点评分 + 固定 68 分阈值 + 一票否决；推荐附带可执行方案；弹窗主动但不打扰；反馈可撤销 | 不变式测试：同一活动放进强批次、弱批次，分数完全相等 |
+| **技术选型** | 本地 Python + 标准库 tkinter + SQLite + 单文件 exe；规则评分而非大模型评分；纯 Python 逻辑回归而非 scikit-learn；**不内置爬虫，只定义数据契约** | 零第三方 GUI 依赖；任何爬虫工具都能接入 |
+| **落地迭代** | 用真实运行数据驱动每一版 | 三个月 201 条推送复盘后加「约会适配闸门」，回放验证拦下 55% 的不合格推荐 |
+
+## 快速开始
+
+```bash
+git clone https://github.com/MichaelZSH9898/sydney-date-scout.git && cd sydney-date-scout
+pip install -r requirements.txt
+cp config.example.yaml config.yaml      # 改住址、预算、距离、偏好
+
+python run.py run --dry-run             # 用内置离线样例跑通全链路（不弹窗）
+python gui.py                           # 打开桌面程序
+python -m unittest discover tests       # 37 个测试
+```
+
+克隆下来默认用的是**离线演示数据**（`fixtures/sample_events.yaml`，虚构活动）。要拿到真实推荐，需要接一个数据源，见下一节。定时运行、打包 exe、排障见 [docs/operations.md](docs/operations.md)。
+
+---
+
+## 接入真实数据
+
+本项目**不内置任何站点爬虫**。哪个网站能抓、条款是否允许、用什么工具抓，因城市、因站点、因时间而变，应该由部署的人来决定。项目只规定交货格式：
 
 ```
-sources.yaml ──► 采集层 collectors/ ──► 去重 dedupe ──► 核验 verify ──► 评分 scoring ──► 阈值筛选
-  (声明式源)      rss/ics/json/astro      标题+时间+场地      时间/地点/价格      rubric.yaml       固定阈值
-                  fixtures(离线)          合并佐证来源        来源/有效性/预算    (逐条独立)        + 维度下限
-                                                                                                      │
-                        SQLite store ◄──────── 批次/历史/跨批次去重/运行间隔 ──────────────────────┤
-                             │                                                                        ▼
-                             ▼                                          弹窗 notifier ◄── 约会方案 plan
-                     GUI 桌面程序 gui.py                                 邮件 mailer（可选，默认关闭）
-                  （当前推荐 + 历史批次）
+你选的爬虫（Scrapy / Playwright / Crawl4AI / Firecrawl / 官方 API 脚本……）
+        │  输出标准 JSON（docs/event.schema.json）
+        ▼
+  data/inbox/*.jsonl  ──或──  一条打印 JSON 的命令
+        │
+        ▼
+  本项目：去重 → 核验 → 评分 → 学习层 → 约会方案 → 推送
+```
+
+### 最小契约
+
+每条活动一个 JSON 对象，必填只有三个字段：
+
+```json
+{"title": "海港夜色爵士音乐会", "start": "2026-11-14T19:30", "url": "https://example.com/events/123"}
+```
+
+其余字段越全，分数越准。下面这几个字段对评分影响最大，爬虫能拿到就一定要给：
+
+| 字段 | 不给会怎样 |
+|---|---|
+| `price` | 默认配置下**直接剔除**（价格未知不推）。免费填 `0`，`"From $25"` 这类字符串也能识别 |
+| `lat` / `lng` | 交通维度走保守默认分；给了会自动算距离与公交耗时 |
+| `dates`（全部场次日期） | 稀缺性走保守默认分。实测同一条活动，有没有 `dates` 相差约 10 分 |
+| `end` 或 `duration_hours` | 性价比（每人每小时花费）算不出来 |
+| `category` | 用站点自己的分类词即可（Music / Markets…），会自动归一；儿童、社区类会被硬排除 |
+
+约会氛围、互动性这类信号爬虫通常拿不到，项目会按活动类别保守推断。爬虫如果知道得更准，可以放进 `signals` 覆盖推断。完整字段见 [`docs/event.schema.json`](docs/event.schema.json)，参考实现见 [`examples/example_scraper.py`](examples/example_scraper.py)。
+
+### 两种交货方式（在 `sources.yaml` 里选）
+
+- **收件箱 `external_inbox`（默认已开启，推荐）**：爬虫把结果写进 `data/inbox/<源名>.jsonl`，自己单独定时运行。超过 4 天没更新的文件会被忽略并告警，防止爬虫停了却没人发现。
+- **命令 `external_command`**：每轮运行一条命令，读取它打印到 stdout 的 JSON。适合抓一次就出结果的轻量脚本。
+
+想直接写 Python 也可以：复制 [`plugins/_example_plugin.py`](plugins/_example_plugin.py)，去掉文件名开头的下划线，启动时会自动加载。
+
+### 自检
+
+```bash
+python run.py validate-feed data/inbox/my_source.jsonl
+```
+
+逐条告诉你：契约错在哪个字段、被核验剔除的原因、能拿几分、缺了哪些信号。退出码为 0 表示契约全部通过。
+
+### 交给你的 AI Agent：对接提示词
+
+把项目克隆到本地后，可以把下面这段话连同尖括号里的信息一起交给你的编程 Agent（Claude Code、Codex、Cursor 等）。它会帮你装好爬虫工具、写好抓取脚本、接上本项目并自检通过：
+
+````text
+你是我的部署助手。我已经把 Sydney Date Scout 克隆到当前目录，请帮我接通真实活动数据。
+
+- 我所在的城市：<例如 悉尼>
+- 我常住的区或起点经纬度：<例如 Surry Hills，或 -33.88, 151.21>
+- 我想看的活动：<例如 演出、展览、市集、美食；不想要的：<…>>
+- 我想用的爬虫工具：<工具名或仓库地址；没想好就写「请你推荐并说明理由」>
+
+请按以下步骤进行，每一步做完简要告诉我结果：
+
+1. 先读懂接口，不要改主程序：阅读 README「接入真实数据」一节、docs/event.schema.json、
+   examples/example_scraper.py，以及 sources.yaml 里 external_inbox / external_command 两段。
+   不要修改 scout/ 目录下的任何代码；新写的脚本放在 scrapers/ 目录（或写成 plugins/ 插件）。
+
+2. 选数据源前先做合规检查，并把结论告诉我：
+   - 逐个核实候选网站的服务条款是否允许自动化访问，以及 robots.txt 是否允许目标路径；
+   - 有官方 API 的优先用官方 API；
+   - 条款禁止自动化访问的、需要登录才能看的页面，一律不接，并告诉我原因；
+   - 抓取时标明真实的 User-Agent，请求间隔不少于 1 秒，只抓推荐窗口（未来 21 天）需要的页面。
+
+3. 安装并配置我选定的爬虫工具，写抓取脚本，输出符合契约的 JSONL：
+   - 必填 title / start / url；start 是「下一场尚未开始的场次」的时间；
+   - 尽量提供 price、lat/lng、dates、end、category、venue、suburb、description、source_name，
+     它们直接决定评分（缺 price 会被剔除，缺 dates 和 lat/lng 会走保守默认分）。
+
+4. 二选一接入：
+   A. 收件箱（推荐）：脚本输出到 data/inbox/<源名>.jsonl，并为脚本注册一个系统定时任务，
+      频率不低于每 3 天一次（Windows 用任务计划程序，macOS/Linux 用 cron）；
+   B. 命令：把 sources.yaml 里 external_command 的 command 改成运行脚本的命令，
+      并设为 enabled: true。
+
+5. 自检循环：反复运行 `python run.py validate-feed <输出文件>` 并修正脚本，直到退出码为 0，
+   且大多数记录没有因为「信号缺失」失分。然后把 sources.yaml 里 demo_fixtures 改成 enabled: false，
+   运行 `python run.py run --dry-run`，把输出的 JSON 给我看。
+
+6. 如果我不在悉尼：在 config.yaml 里设置 home_coords: [纬度, 经度]，按我的城市改写 area_anchors
+   （碰头与续摊地点），并列出项目里还有哪些悉尼专属内容需要我手动确认。
+
+7. 最后给我一份简短的交接说明：接了哪些数据源及各自的条款结论、新增了哪些文件、
+   定时任务怎么查看和取消、以后网站改版导致抓取失败时去哪里看日志（data/out/scout.log）。
+````
+
+> **合规提醒**：抓取公开网页的合法性取决于所在地法律和目标网站的条款，部署者需要自行判断并承担责任。本项目只消费你交给它的数据，不会替你访问任何网站。
+
+---
+
+## 架构
+
+```
+外部数据（收件箱 / 命令 / 插件）+ 离线样例
+          │
+          ▼
+  去重 dedupe ──► 核验 verify ──► 评分 scoring ──► 阈值筛选 ──► 学习层 ──► 约会方案 plan
+  标题+时间+场地    时间/价格/距离     rubric.yaml      固定 68 分     内容判别 +     时间线/预算/
+  合并来源证据      约会适配闸门       7 维度绝对锚点   + 一票否决     个性化排序     备选/话题
+          │                                                                         │
+          └──────────────────── SQLite：批次 / 历史 / 反馈 / 行为 ───────────────────┤
+                                                                                    ▼
+                                                     桌面弹窗 notifier · 桌面程序 gui.py
 ```
 
 | 模块 | 职责 |
 |---|---|
-| `sources.yaml` | 声明式源清单。新增一个源＝加一段 YAML，不用改代码 |
-| `scout/collectors/` | `rss` / `ics` / `json` / `astro` / `fixtures` / `cityofsydney` 六种采集器，注册表模式 |
-| `scout/collectors/cityofsydney.py` | **当前唯一的真实数据源**。悉尼市政府官方活动库，见第 3 节 |
-| `scout/dedupe.py` | 标题模糊匹配 × 时间接近 × 场地一致；合并后把各来源汇入 `evidence` |
-| `scout/verify.py` | 时间/地点/价格/来源/有效性 + 预算、距离、类别、排除项过滤 |
-| `scout/scoring.py` | 7 维度打分。**函数签名只接受单个 event + rubric**，结构上无法相对化 |
-| `rubric.yaml` | 全部锚点、权重、阈值、降权系数，带 `version` |
-| `scout/plan.py` | 生成时间线 / 预算拆解 / 备选方案 / 话题；可选 LLM 润色 |
-| `scout/store.py` | SQLite：推荐批次、跨批次去重、推送历史、运行间隔守卫 |
-| `scout/notifier.py` | 桌面弹窗（纯 tkinter，无额外依赖），可一键拉起 GUI |
-| `gui.py` | 桌面程序：左边选批次，右边看完整方案 |
-| `app.py` | 打包成 exe 时的统一入口（`--run` 跑采集，无参数开界面）|
+| `sources.yaml` | 声明式数据源清单。新增一个源就是加一段 YAML |
+| `scout/collectors/external.py` | 外部数据契约：解析、校验、按类别画像推断缺失信号 |
+| `scout/collectors/` | 采集器注册表；另有 `rss / ics / json / astro / fixtures`，以及 `plugins/` 自动加载 |
+| `scout/geo.py` | 起点坐标、距离、公交耗时估算 |
+| `scout/dedupe.py` · `verify.py` | 跨源去重；核验与「约会适配闸门」（儿童/社区/志愿者类直接剔除） |
+| `scout/scoring.py` + `rubric.yaml` | 7 维度打分。函数签名只接受单个活动，结构上无法相对化 |
+| `scout/datefit.py` · `personalize.py` | 学习层：👍/👎 训练的内容判别模型；行为驱动的类别亲和度（只调批内排序） |
+| `scout/plan.py` | 约会方案；可选调用大模型润色文案，失败时静默回退 |
+| `scout/store.py` | SQLite：批次、跨批次去重、推送历史、反馈、行为、运行间隔守卫 |
+| `gui.py` · `scout/notifier.py` · `scout/theme.py` | 桌面程序与弹窗；中国传统色「胭脂桃夭」主题集中在 theme.py |
 
----
+## 评分规则（rubric v1.2.0）
 
-## 2. 评分规则（rubric v1.1.0）
+总分 = Σ(维度分 × 权重) × 10，满分 100，**推荐阈值固定 68 分**。
 
-总分 = Σ(维度分 × 权重) × 10，范围 0–100。**推荐阈值 68 分，固定不变。**
+| 维度 | 权重 | | 维度 | 权重 |
+|---|---|---|---|---|
+| 约会氛围 | 0.26 | | 新鲜感 | 0.12 |
+| 互动性 | 0.18 | | 交通便利度 | 0.12 |
+| 稀缺性 | 0.14 | | 讨论热度 | 0.04 |
+| 性价比 | 0.14 | | | |
 
-| 维度 | 权重 | 定义 |
-|---|---|---|
-| 新鲜感 | 0.12 | 对悉尼观众的「第一次」程度 |
-| 稀缺性 | 0.14 | 错过后短期内无法再参与的程度 |
-| 讨论热度 | 0.04 | 近 30 天独立信息源报道数（绝对计数） |
-| 约会氛围 | 0.26 | 5 项检查表各 2 分 |
-| 互动性 | 0.18 | 两人产生共同经历的程度 |
-| 性价比 | 0.14 | AUD / 人 / 小时 |
-| 交通便利度 | 0.12 | 自 `home_suburb` 公交门到门耗时 + 换乘 |
+**一票否决**：约会氛围 <5、交通 <4、性价比 <3，或信息完整度 <70%。**降权**：单人向活动 ×0.85、社区场地 ×0.8。锚点全表与每次调权的理由写在 [`rubric.yaml`](rubric.yaml) 里；`python run.py explain --uid <uid>` 可以打印任意一条活动的逐维度评分依据。
 
-### v1.1.0 为什么要重新配权重
+## 文档
 
-v1.0.0 的权重是拿 `fixtures/sample_events.yaml` 里手写的样例校准的，那些样例带着
-`media_mentions: 5`、`first_time_in_city: true` 这类真实世界拿不到的信号。
-接上第一个真实源后实测 42 个活动，发现两个维度失去了区分度：
-
-| 维度 | 原权重 | 实测 | 为什么 |
-|---|---|---|---|
-| 讨论热度 | 0.12 | 恒为 **2.0** | 定义是「独立信息源计数」。只接了一个源，任何活动都只能算 1 家，分数与活动好坏无关 |
-| 新鲜感 | 0.18 | 最高 **4.0** | 没有任何官方活动数据会标注「本届首办」，公开数据最多推断出「年度重复举办」 |
-
-合计 30% 的权重被数据可得性锁死在 2.9/10，最高分只有 60.8，68 分线永远不可能触发。
-**这不是标准太严，是这两个维度在当前数据下测不出东西。**
-
-所以把权重移到能被真实测量、且确实决定约会体验的维度上（约会氛围、互动性、稀缺性、
-性价比、交通），而不是降低阈值 —— 68 分的含义仍然是「值得为它安排一次约会」。
-讨论热度保留 0.04 而非归零：接入第二个真实源后，跨源去重会让它重新有效，届时应调回。
-
-改动时数据库里没有任何历史推送记录，所以没有损失任何可比性。**之后再改就要付出这个代价。**
-
-**锚点示例**（完整表见 `rubric.yaml`）
-
-- 新鲜感：首次登陆悉尼=10｜首届=8｜新开业≤30 天=8｜年度活动有新内容=6｜年度沿用=4｜常设无更新=0
-- 稀缺性：窗口≤1 天或仅剩 1 场=10｜≤3=8｜≤14 天=6｜≤45 天=4｜>120 天=0；余票紧张 +1
-- 讨论热度：≥8 家独立媒体=10｜5–7=8｜3–4=6｜2=4｜1=2｜0=0
-- 约会氛围：可交谈 / 有座位 / 出片 / 时段合适 / 可续摊，每项 +2
-- 互动性：双人协作=10｜动手=8｜可走动试吃=6｜共同观看可交流=4｜需安静=2｜无=0
-- 性价比：免费=10｜≤A$10/h=9｜≤20=7｜≤35=5｜≤60=3｜≤100=1｜>100=0
-- 交通：≤15 分钟 0 换乘=10｜≤25/1 换=8｜≤40/1 换=6｜≤55/2 换=4｜>75 分钟=0；末端步行 >12 分钟 −1
-
-**一票否决**：约会氛围 <5、交通 <4、性价比 <3，或信息完整度 <70% —— 无论总分多高都不推。
-
-**降权**：命中单人向关键词（meetup / 讲座 / networking / 读书会…）的项目按固定系数 **0.85** 折算，不剔除。
-**硬排除**：电竞、动漫（类别 + 关键词双重拦截）。
-**硬剔除**：超预算、超距离、已售罄、已过期、无来源链接、价格未知。
-
-### 可比性是怎么保证的
-
-1. `score_event(event, rubric)` 的入参里没有活动列表、没有均值、没有排名 —— 相对化在代码结构上不可能发生。
-2. 阈值、锚点、权重全部写死在 `rubric.yaml`，改动必须升级 `version`。
-3. `run.py history` 会检查历史推送是否同一 rubric 版本，跨版本会明确告警「不可直接比较」。
-4. `tests/test_scoring.py::test_score_is_independent_of_batch` 把同一活动分别放进「强批次」和「弱批次」，断言分数完全相等。
-
----
-
-## 3. 快速开始
-
-### 用打包好的 exe（不需要装 Python）
-
-```
-悉尼约会助理.exe                        双击打开，浏览当前推荐与历史
-悉尼约会助理.exe --run                  跑一次采集，有新推荐就弹窗
-悉尼约会助理.exe --run --respect-interval   同上，但未满 3 天则跳过（给定时任务用）
-```
-
-首次运行会在 exe 旁边自动生成 `config.yaml`（改预算、住址、区域锚点都在这里）
-和 `data/`（数据库与运行日志）。这两样在 exe 外面，换新版 exe 不会丢历史。
-
-自己重新打包：
-
-```bash
-pip install pyinstaller
-pyinstaller build_exe.spec --noconfirm    # 产物在 dist/
-```
-
-### 用源码
-
-```bash
-pip install -r requirements.txt
-cp config.example.yaml config.yaml     # 改 home_suburb / 预算 / 距离 / 偏好
-
-python gui.py                          # 打开桌面程序
-python run.py run --dry-run            # 用内置离线样例跑通全链路，不弹窗不发信
-python tests/test_scoring.py           # 跑不变式测试
-```
-
-`--dry-run` 首次运行（内置 `fixtures/sample_events.yaml` + `astro` 源，共 14 条样例）会输出：
-
-```json
-{
-  "collected": 14,
-  "after_dedupe": 14,
-  "verified_passed": 9,
-  "excluded_breakdown": {"硬排除类别": 2, "超预算": 1, "超距离": 2},
-  "recommended": 5,
-  "top_score": 80.8,
-  "below_threshold_scores": [67.6, 63.2, 58.0],
-  "vetoed": ["年度品牌折扣清仓周：约会氛围 2.0 低于下限 5"],
-  "output_file": "data/out/digest-2026...html"
-}
-```
-
-注意 `below_threshold_scores` 里的 67.6：**差 0.4 分也不推**（阈值 68）。这是设计，不是 bug。
-`python run.py explain --uid <events 表里的 uid>` 可以打印任意一条（包括未达标的）逐维度评分依据。
-
-### 真实数据源的实际情况
-
-`sources.yaml` 里原本那 17 个站点 URL 是**没核实过的模板**。2026-08-01 全部实测过一遍，
-结论比预想的差很多：
-
-| 结果 | 数量 | 说明 |
-|---|---|---|
-| 404 / 域名不通 | 15 | 包括 City of Sydney、歌剧院、NSW 美术馆、MCA、Westfield、Barangaroo、Scoopon、Groupon、SCG、Sydney FC 等。这些站**从来没提供过** RSS，URL 是照着常见路径猜的 |
-| 活着但没用 | 2 | Time Out、Concrete Playground 的 feed 确实是 200 + 合法 RSS，但它们是**资讯流不是活动流** |
-
-「活着但没用」这一条是最容易踩的坑：通用 `rss` 采集器把 `entry.published`
-（文章发布时间）当成活动开始时间，于是每一条都在核验阶段被判「已过期」——
-实测接进来 110 条，可用 0 条，只是白白拖慢每轮运行。所以这两个源**故意保持关闭**，
-要用它们做「交叉验证 + 热度计数」，得先写一个能从正文里抽取活动日期的专用适配器。
-
-还查了这些站有没有埋 JSON-LD `Event` 结构化数据（那是标准做法）：**一个都没有**。
-
-**当前唯一可用的真实源是 City of Sydney「What's On」**（`scout/collectors/cityofsydney.py`），
-也是唯一能同时给出真实开始时间、价格、场馆经纬度的公开来源。它是 Next.js 应用，
-数据内嵌在页面的 `<script id="__NEXT_DATA__">` 里，和浏览器拿到的是同一份：
-
-- 列表页 `/?time=this-week` 等一次给 300 条（robots.txt 明确 `Allow: /?time=*`）
-- 详情页 `/events/<slug>`（在官方 sitemap 里公开列出）给出 `priceData` /
-  `eventUpcomingTime` / `eventVenue`(lat,lng) / `eventDates` / `eventCategories`
-
-流程是「列表页粗筛 → 只对进入推荐窗口的活动抓详情」，一轮约 170 个请求、3 分钟。
-
-> **`list_urls` 别只填 this-week。** 列表按「最近一场」排序，前几十条会被当天正在
-> 展出的常设展占满，真正适合约会的周末市集/工作坊排在后面。实测只抓 60 条详情时
-> 0 条过线，覆盖完整推荐窗口后有 9 条过线 —— 看起来像「标准太严」，其实是取样太小。
-
-```bash
-python run.py check-sources            # 校验 sources.yaml 里每个 URL 是否可用
-```
-
-需要更精细字段的站点，照着 `cityofsydney.py` 写个专用适配器，用 `@collector("your_type")` 注册即可。
-其余 16 个源保留在 `sources.yaml` 里但全部 `enabled: false`，每条都注明了实测结果。
-
-合规提醒：只使用站点公开提供的 feed / API，遵守 robots.txt 与各站服务条款（默认每源 1 秒延时、带 User-Agent）。社交媒体请走官方 API，不要抓需要登录的页面。天文/自然类走 `astro` 本地表，每年更新一次即可。
-
-### 通知方式
-
-默认是**桌面弹窗**：跑完有新推荐就在屏幕右下角弹出，列出分数与标题，
-点「查看详情」直接打开桌面程序看完整方案。在 `config.yaml` 里调：
-
-```yaml
-notify:
-  enabled: true
-  auto_close_seconds: 0     # 0 = 一直显示到手动关闭；设 30 则 30 秒后自动消失
-```
-
-**邮件是可选的，默认关闭**。国内网络直连 Gmail 的 SMTP 端口（587/465）常被限制，
-表现为 `TimeoutError / WinError 10060`——注意浏览器能打开 Gmail 不代表这里能连上，
-Python 发信走原始 socket，不读 `HTTP_PROXY` 环境变量。想启用先诊断：
-
-```bash
-python run.py test-email      # 分别测直连与代理，并发一封测试邮件
-```
-
-连不通的两个解法：在 `config.yaml` 的 `email` 下加 `proxy` 走本地代理
-（需 `pip install PySocks`），或者改用国内邮箱（QQ/163）发信、收件人仍填 Gmail。
-
----
-
-## 4. 定时运行
-
-所有方案都用 `--respect-interval`：**每天触发一次，但程序内部的间隔守卫保证只有距上次
-运行满 `interval_days`（默认 3 天）才真正执行**。好处是电脑关机错过某天也能自动补上，
-而多次触发不会重复推送。
-
-### 长期关机后会不会一次弹一堆窗
-
-不会。四层保障，每一层都验证过：
-
-| 机制 | 效果 |
+| 文档 | 内容 |
 |---|---|
-| `notify()` 每次运行只建一个 tkinter 窗口 | 一轮推荐多少条都只有**一个**弹窗（列前 5 条 + 「另有 N 个」） |
-| `max_items: 10` | 单批次最多 10 条 |
-| 任务的 `MultipleInstances: IgnoreNew` | 上一个实例还在跑时，新触发直接忽略，不会叠加 |
-| `StartWhenAvailable` | 语义是「错过后尽快补跑**一次**」，不是把错过的每天都排队补 |
+| [docs/case-study.md](docs/case-study.md) | 产品复盘：烦恼 → 需求 → 设计 → 选型 → 迭代 |
+| [docs/operations.md](docs/operations.md) | 安装、exe 打包、定时运行、配置项、常用命令、已知边界 |
+| [docs/event.schema.json](docs/event.schema.json) | 外部数据契约 |
+| [CHANGELOG.md](CHANGELOG.md) | 每个版本改了什么、为什么改 |
 
-所以关机 60 天后开机 = 补跑 1 次 = 1 个弹窗；之后 3 天内的每日触发被间隔守卫静默跳过。
+## 关于开发方式
 
-> **`record_run()` 必须排在 `notify()` 之前**（见 `pipeline.py`）。
-> `notify()` 最后是 `root.mainloop()`，`auto_close_seconds: 0` 时弹窗不关就一直阻塞。
-> 早期版本把 `record_run()` 放在它后面，结果是：夜里跑完没人关窗 → 这次运行永远不被记录
-> → 间隔守卫下次读到的还是上上次的时间 → **采集白跑一轮，日志里还看不出问题**。
-> 这个 bug 在数据库里留下过痕迹：`batches` 表有 8/1 23:43 的批次，`runs` 表却没有那条记录。
-> 一轮是否真的跑完，与用户有没有点掉弹窗无关。
+产品定义、需求取舍、视觉定调与验收由作者完成，代码实现大量借助 AI 编程助手（Claude）协作完成，提交记录里的协作者署名如实保留。
 
-**Windows（任务计划程序）**
+## 许可
 
-```powershell
-powershell -ExecutionPolicy Bypass -File deploy\register-task.ps1 -UseSource   # 源码版（本机推荐）
-powershell -ExecutionPolicy Bypass -File deploy\register-task.ps1              # 有 exe 时优先用 exe
-```
-
-> ⚠ **exe 版和源码版的数据目录不是同一个。**
-> `scout/paths.py::data_dir()` 在打包后返回 **exe 自己所在的目录**，所以
-> `dist\悉尼约会助理.exe` 用的是 `dist\config.yaml` 和 `dist\data\scout.db`；
-> 源码版用的是项目根下的 `config.yaml` 和 `data\scout.db`。
-> 两边的配置和历史推送记录**各自独立、互不可见** —— 双击 exe 却发现「没有历史推荐」
-> 通常就是这个原因。
->
-> 本机已装 Python，所以用 `-UseSource`：配置和历史只有一份，
-> 而且改了代码不需要重新 `pyinstaller`（改了代码却忘了重新打包，
-> 定时任务会一直跑旧逻辑，这种问题很难查）。
-> 要用 exe 的话，把 `config.yaml` 和 `data\` 一起复制到 `dist\` 下面。
-
-`-UseSource` 注册的任务**直接调用 `pythonw.exe run.py run --respect-interval`**，
-不经过 `deploy\run-scout.bat`。原因是本项目路径含中文：
-
-> cmd.exe 解析 .bat 用的是**当前控制台代码页**（不是文件自身的编码）。
-> 简中系统上这个值可能是 936 也可能是 65001，取决于 shell 怎么启动的，
-> 所以 .bat 里任何非 ASCII 字节 —— 包括写死的中文路径 —— 都会被解错：
-> 行在多字节字符处被截断，`REM` 注释行被当成命令执行，`cd /d` 失效。
-> 实测症状是**退出码 1、连日志文件都创建不出来**，纯静默失败。
-> 计划任务的动作存在任务 XML 里是 Unicode，直接指向 pythonw.exe 就没有这个问题。
-
-`run-scout.bat` 保留给手动/便携场景，已改成**纯 ASCII**，项目目录由 `%~dp0..` 推导
-（不再写死路径），两种代码页下实测都能跑。**改这个文件时不要往里加中文。**
-
-日志由程序自己写（`run.py::_setup_log` → `data\out\scout.log`，1MB 滚动保留 3 份），
-不依赖 shell 重定向 —— 定时任务用 `pythonw.exe` 运行，没有 stdout，
-只往控制台打日志的话出了错什么都查不到。
-
-```powershell
-Start-ScheduledTask -TaskName SydneyDateScout        # 立即测试跑一次
-Get-ScheduledTaskInfo -TaskName SydneyDateScout      # 看上次运行结果
-Get-Content data\out\scout.log -Tail 30              # 看运行日志
-Unregister-ScheduledTask -TaskName SydneyDateScout -Confirm:$false   # 取消定时
-```
-
-**Linux / macOS**
-
-```bash
-# A. cron
-cp deploy/crontab.example /tmp/ct && crontab /tmp/ct
-
-# B. systemd timer
-sudo cp deploy/sydney-date-scout.{service,timer} /etc/systemd/system/
-sudo systemctl enable --now sydney-date-scout.timer
-
-# C. 常驻进程 / Docker
-python run.py serve
-docker build -f deploy/Dockerfile -t date-scout . && docker run -d --env-file .env date-scout
-```
-
----
-
-## 5. 可配置项
-
-| 配置 | 说明 |
-|---|---|
-| `home_suburb` | 交通便利度的计算起点 |
-| `max_distance_km` | 超出即剔除（做短途主题时调到 150） |
-| `budget_per_person_aud` | 人均预算上限 |
-| `categories` | 订阅类别，删掉某项即不再推送 |
-| `area_anchors` | 各区的前置咖啡 / 续摊地点，直接影响生成的约会方案 |
-| `lookahead_days` | 推荐窗口（默认未来 21 天） |
-| `resend_after_days` | 同一活动多久内不重复推（时间/价格变动会重置） |
-| `send_when_empty` | 无达标项目时是否仍弹「本次无推荐」说明 |
-| `notify.enabled` | 是否弹窗（默认开） |
-| `notify.auto_close_seconds` | 弹窗自动关闭秒数，0 = 不自动关 |
-| `email.enabled` | 是否同时发邮件（默认关，见第 3 节） |
-| `email.proxy` | 发信走本地代理，国内连 Gmail 常需要 |
-| `llm.enabled` | 是否用 Anthropic API 润色方案文案（默认关闭） |
-
----
-
-## 6. 常用命令
-
-```bash
-python gui.py                        # 打开桌面程序（当前推荐 + 历史）
-python run.py run --dry-run          # 跑一遍不弹窗不发信，只生成 HTML
-python run.py run --check-urls       # 联网校验每条链接可达性
-python run.py run --source timeout_sydney   # 只跑指定源，调试用
-python run.py explain --uid <uid>    # 打印某活动逐维度评分依据
-python run.py history                # 推送历史 + 分数可比性自检
-python run.py test-email             # 诊断 SMTP 连通性（仅在启用邮件时需要）
-```
-
-## 7. 已知边界
-
-- **交通耗时目前是估算，不是真实行程。** City of Sydney 给出场馆真实经纬度，
-  采集器据此算直线距离，再按悉尼市区经验系数（起步 12 分钟 + 每公里 3.2 分钟）
-  折算门到门耗时。接 Transport for NSW 的 Trip Planner API 后应整个替换掉
-  `cityofsydney.py::_estimate_transit`（在 `verify` 前加一步 enrich 即可）。
-- **讨论热度目前恒为 2 分**（1 家独立来源）。这是只接了一个源的必然结果，
-  不是 bug。接入第二个带真实活动日期的源后，跨源去重会让它重新有效，
-  届时应把 `rubric.yaml` 里的 `buzz` 权重从 0.04 调回去（并升 version）。
-- **新鲜感只能推断到「年度重复举办」**。官方数据没有「是否首届」字段，
-  采集器只用 CMS 记录的 `createdAt` 做单向推断：记录存在一年以上 = 年度活动。
-  反过来「记录新建 = 首届」不成立（可能只是重新录入），所以新记录一律保持未知。
-- 通用 RSS 采集器只能尽力解析日期与价格，解析不出的条目会在核验阶段被剔除（宁可漏推，不推错）。
+[MIT](LICENSE) © 2026 Shuhan Zhang。离线样例中的活动均为虚构；示例里出现的场馆名与品牌名仅用于说明，与本项目无关联。

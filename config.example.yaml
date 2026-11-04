@@ -40,6 +40,7 @@ sources_file: sources.yaml
 
 # ---------- 个人偏好（可配置）----------
 home_suburb: "Surry Hills"        # 计算交通便利度的起点
+# home_coords: [-33.8845, 151.2118]  # 可选：直接给起点经纬度（不在内置坐标表里的区、或换城市时用）
 max_distance_km: 40               # 超出即剔除（短途活动可调大到 150）
 budget_per_person_aud: 120        # 人均预算上限，超出即剔除
 
