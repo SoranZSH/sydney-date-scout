@@ -7,3 +7,7 @@ __pycache__/
 .claude/
 # 本机配置含邮箱授权码等敏感信息，只跟踪 config.example.yaml
 config.yaml
+# 本机专属数据源与插件（见 README「本机专属配置」）
+sources.local.yaml
+plugins/*
+!plugins/_example_plugin.py

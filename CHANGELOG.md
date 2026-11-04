@@ -17,8 +17,9 @@
 | 地理工具独立成模块，新增 `home_coords` 配置，为换城市铺路 | `scout/geo.py` |
 | 参考实现：不联网的示例爬虫，含 robots.txt / User-Agent / 限速骨架 | `examples/example_scraper.py` |
 | 移除 City of Sydney 采集器；`demo_fixtures` 默认开启，克隆即可跑通 | `sources.yaml` |
+| 本机专属配置：`sources.local.yaml` 按 id 覆盖或追加数据源，与 `plugins/` 一起不进版本库 | `scout/config.py` |
 
-新增 14 个测试（共 37 个）。评分表、阈值、学习层不变。
+新增 15 个测试（共 38 个）。评分表、阈值、学习层不变。
 
 ## v1.4.2（2026-10-31）：「胭脂桃夭」—— 桃花入色
 

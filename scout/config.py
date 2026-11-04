@@ -47,6 +47,30 @@ def _adopt_git_dir(base: Path) -> None:
         pass
 
 
+def _local_sources(*dirs: Path) -> list[dict]:
+    """本机专属源：数据目录（优先）或资源目录下的 sources.local.yaml，不进版本库。"""
+    for d in dirs:
+        f = d / "sources.local.yaml"
+        if f.exists():
+            doc = _load_yaml(f) or {}
+            return list(doc.get("sources") or [])
+    return []
+
+
+def merge_local_sources(base: list[dict], local: list[dict]) -> list[dict]:
+    """按 id 合并：同 id 的本机条目覆盖字段（例如只写 `enabled: false` 关掉演示源），
+    新 id 追加在后。这样私人数据源和开关不用改动受版本控制的 sources.yaml。"""
+    merged = [dict(s) for s in base]
+    index = {s.get("id"): i for i, s in enumerate(merged)}
+    for item in local:
+        sid = item.get("id")
+        if sid in index:
+            merged[index[sid]].update(item)
+        elif sid and "type" in item:
+            index[sid] = len(merged)
+            merged.append(dict(item))
+    return merged
+
 def load_config(config_path: str | Path) -> dict[str, Any]:
     path = Path(config_path)
     if not path.exists():
@@ -77,7 +101,8 @@ def load_config(config_path: str | Path) -> dict[str, Any]:
     cfg["_data_dir"] = str(dat_dir)      # 可写数据根目录
     cfg["_config_path"] = str(path)
     cfg["rubric"] = rubric
-    cfg["sources"] = sources_doc["sources"]
+    cfg["sources"] = merge_local_sources(sources_doc["sources"],
+                                         _local_sources(Path(dat_dir), Path(res_dir)))
 
     # 采集器插件：资源目录与数据目录下的 plugins/ 都会扫描（exe 版放在 exe 旁边即可）
     from .collectors import load_plugins

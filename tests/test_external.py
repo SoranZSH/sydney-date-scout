@@ -22,6 +22,7 @@ import yaml  # noqa: E402
 from scout.collectors import REGISTRY, get_collector, load_plugins  # noqa: E402
 from scout.collectors.external import (SIGNAL_FIELDS, FeedError, load_records,  # noqa: E402
                                        normalize_category, parse_record)
+from scout.config import merge_local_sources  # noqa: E402
 from scout.geo import home_coords  # noqa: E402
 from scout.scoring import passes_threshold, score_event  # noqa: E402
 from scout.verify import verify_event  # noqa: E402
@@ -160,6 +161,20 @@ class TestDelivery(unittest.TestCase):
             loaded = load_plugins([Path(d)])
             self.assertEqual(loaded, ["zz_test_plugin.py"])
             self.assertIn("zz_test_plugin", REGISTRY)
+
+
+class TestLocalSources(unittest.TestCase):
+    def test_merge_overrides_by_id_and_appends_new(self):
+        base = [{"id": "demo", "type": "fixtures", "enabled": True},
+                {"id": "inbox", "type": "external", "enabled": True}]
+        local = [{"id": "demo", "enabled": False},
+                 {"id": "mine", "type": "my_plugin", "enabled": True},
+                 {"id": "no_type"}]                      # 新 id 缺 type：忽略
+        got = merge_local_sources(base, local)
+        self.assertEqual([s["id"] for s in got], ["demo", "inbox", "mine"])
+        self.assertFalse(got[0]["enabled"])
+        self.assertEqual(got[0]["type"], "fixtures")     # 未覆盖的字段保留
+        self.assertTrue(base[0]["enabled"])              # 不改动原列表
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # 悉尼约会助理 · Sydney Date Scout
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-37%20passed-87a070)
+![Tests](https://img.shields.io/badge/tests-38%20passed-87a070)
 ![GUI deps](https://img.shields.io/badge/GUI%20依赖-0-a93a4c)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-4e4266)
 ![License](https://img.shields.io/badge/license-MIT-cc7d8a)
@@ -46,7 +46,7 @@ cp config.example.yaml config.yaml      # 改住址、预算、距离、偏好
 
 python run.py run --dry-run             # 用内置离线样例跑通全链路（不弹窗）
 python gui.py                           # 打开桌面程序
-python -m unittest discover tests       # 37 个测试
+python -m unittest discover tests       # 38 个测试
 ```
 
 克隆下来默认用的是**离线演示数据**（`fixtures/sample_events.yaml`，虚构活动）。要拿到真实推荐，需要接一个数据源，见下一节。定时运行、打包 exe、排障见 [docs/operations.md](docs/operations.md)。
@@ -102,6 +102,19 @@ python run.py validate-feed data/inbox/my_source.jsonl
 
 逐条告诉你：契约错在哪个字段、被核验剔除的原因、能拿几分、缺了哪些信号。退出码为 0 表示契约全部通过。
 
+### 本机专属配置
+
+私人数据源和开关不必改动受版本控制的 `sources.yaml`。在项目根（exe 版放在 exe 旁边）新建 `sources.local.yaml`，按 `id` 合并：同 id 的条目只覆盖你写的字段，新 id 追加为新数据源。它和 `plugins/` 目录都已加入 `.gitignore`，`git pull` 更新时不会冲突。
+
+```yaml
+sources:
+  - id: demo_fixtures       # 关掉演示数据
+    enabled: false
+  - id: my_source           # 新增一个插件数据源（plugins/my_source.py 里注册的类型）
+    type: my_source
+    enabled: true
+```
+
 ### 交给你的 AI Agent：对接提示词
 
 把项目克隆到本地后，可以把下面这段话连同尖括号里的信息一起交给你的编程 Agent（Claude Code、Codex、Cursor 等）。它会帮你装好爬虫工具、写好抓取脚本、接上本项目并自检通过：
@@ -134,11 +147,11 @@ python run.py validate-feed data/inbox/my_source.jsonl
 4. 二选一接入：
    A. 收件箱（推荐）：脚本输出到 data/inbox/<源名>.jsonl，并为脚本注册一个系统定时任务，
       频率不低于每 3 天一次（Windows 用任务计划程序，macOS/Linux 用 cron）；
-   B. 命令：把 sources.yaml 里 external_command 的 command 改成运行脚本的命令，
-      并设为 enabled: true。
+   B. 命令：在 sources.local.yaml 里覆盖 external_command：把 command 改成运行脚本的命令，
+      并设为 enabled: true（不要直接改 sources.yaml）。
 
 5. 自检循环：反复运行 `python run.py validate-feed <输出文件>` 并修正脚本，直到退出码为 0，
-   且大多数记录没有因为「信号缺失」失分。然后把 sources.yaml 里 demo_fixtures 改成 enabled: false，
+   且大多数记录没有因为「信号缺失」失分。然后在 sources.local.yaml 里把 demo_fixtures 设为 enabled: false，
    运行 `python run.py run --dry-run`，把输出的 JSON 给我看。
 
 6. 如果我不在悉尼：在 config.yaml 里设置 home_coords: [纬度, 经度]，按我的城市改写 area_anchors
