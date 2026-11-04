@@ -9,6 +9,7 @@
   python run.py explain --uid <uid>    # 打印某活动的逐维度评分依据
   python run.py history                # 已推送项目的分数历史（跨批次可比性自检）
   python run.py test-email             # 诊断 SMTP 连通性并发一封测试邮件
+  python run.py validate-feed <文件>    # 外部爬虫产出的 JSON 是否符合契约、能拿几分
 """
 from __future__ import annotations
 
@@ -102,7 +103,7 @@ def cmd_check_sources(args) -> int:
             print(f"  ○ {src['id']:28} 本地源，跳过"); continue
         if not src.get("enabled", True):
             print(f"  – {src['id']:28} 已禁用"); continue
-        # 大部分源是单个 url；专用采集器（如 cityofsydney）可能配的是一组 list_urls。
+        # 大部分源是单个 url；专用采集器插件可能配的是一组 list_urls。
         urls = src.get("list_urls") or ([src["url"]] if src.get("url") else [])
         if not urls:
             print(f"  ? {src['id']:28} 该源没有可校验的 URL（由采集器自行决定抓取地址）")
@@ -241,6 +242,63 @@ def cmd_affinity(args) -> int:
     return 0
 
 
+def cmd_validate_feed(args) -> int:
+    """外部爬虫对接的自检回路：逐条检查契约 → 核验 → 评分，告诉对接方每条卡在哪。
+
+    退出码：0 = 全部符合契约；1 = 有记录不符合契约；2 = 文件本身读不了。
+    AI Agent 对接时应循环「改爬虫 → 跑本命令」直到退出码为 0。
+    """
+    from scout.collectors.external import FeedError, load_records, parse_record
+    from scout.scoring import passes_threshold, score_event
+    from scout.verify import verify_event
+
+    cfg = load_config(args.config)
+    src = {"id": "validate", "category_hint": args.category_hint}
+    try:
+        text = sys.stdin.read() if args.path == "-" else Path(args.path).read_text(encoding="utf-8")
+        records = load_records(text, args.path)
+    except (OSError, FeedError) as ex:
+        print(f"✗ 无法读取：{ex}")
+        return 2
+
+    bad = excluded = passed = 0
+    for i, rec in enumerate(records, 1):
+        try:
+            e = parse_record(rec, src, cfg)
+        except FeedError as ex:
+            bad += 1
+            print(f"  ✗ #{i:<3} 契约错误：{ex}")
+            continue
+        verify_event(e, cfg)
+        if e.exclude_reason:
+            excluded += 1
+            print(f"  – #{i:<3} 合规但被核验剔除：{e.exclude_reason}  |  {e.title[:40]}")
+            continue
+        score_event(e, cfg["rubric"])
+        ok, why = passes_threshold(e, cfg["rubric"])
+        passed += ok
+        mark = "★" if ok else "·"
+        tail = "达标" if ok else why
+        missing = [s["label"] for k, s in e.scores.items()
+                   if not k.startswith("_") and s.get("missing")]
+        if missing:
+            tail += f"（信号缺失：{'、'.join(missing)}）"
+        print(f"  {mark} #{i:<3} {e.total:5.1f} 分  [{e.category}]  完整度 {e.completeness:.0%}  "
+              f"{tail}  |  {e.title[:40]}")
+
+    total = len(records)
+    print(f"\n共 {total} 条：契约错误 {bad}，被核验剔除 {excluded}，"
+          f"进入评分 {total - bad - excluded}，其中达标 {passed}。")
+    if total == 0:
+        print("文件里没有记录。")
+    elif bad:
+        print("请按上面的提示修正爬虫输出，契约见 docs/event.schema.json。")
+    elif passed == 0:
+        print("格式没问题，但没有达标活动 —— 常见原因：日期不在推荐窗口内、缺价格、"
+              "缺经纬度导致交通分走保守默认、缺 dates 导致稀缺性走保守默认。")
+    return 1 if bad else 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="悉尼约会提案助理")
     p.add_argument("-c", "--config", default=DEFAULT_CFG)
@@ -278,6 +336,12 @@ def main() -> int:
 
     sub.add_parser("affinity", help="查看类别亲和度（Track B 个性化，当前状态）"
                    ).set_defaults(func=cmd_affinity)
+
+    v = sub.add_parser("validate-feed", help="自检外部爬虫产出的 JSON/JSONL 是否符合契约")
+    v.add_argument("path", help="JSON / JSONL 文件路径；- 表示从 stdin 读")
+    v.add_argument("--category-hint", default="experience",
+                   help="记录没给类别时的兜底类别（同 sources.yaml 的 category_hint）")
+    v.set_defaults(func=cmd_validate_feed)
 
     args = p.parse_args()
     _setup_log(args.verbose)

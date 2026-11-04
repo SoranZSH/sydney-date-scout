@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sydney-date-scout/event.schema.json",
+  "title": "Sydney Date Scout · 外部事件契约 v1.0",
+  "description": "外部爬虫交给本项目的单条活动记录。文件可以是 JSON 数组、{\"events\": [...]} 或 JSONL（每行一条）。只有 title / start / url 必填；其余字段越全，评分越准。缺失的约会信号会按类别保守推断，推断永远不覆盖这里给出的值。自检：python run.py validate-feed <文件>",
+  "type": "object",
+  "required": ["title", "start", "url"],
+  "properties": {
+    "title":        {"type": "string", "minLength": 1, "description": "活动名称"},
+    "start":        {"type": "string", "description": "第一场尚未开始的场次的开始时间，ISO 8601，如 2026-11-14T19:30 或 2026-11-14T19:30:00+11:00。长期活动请给『下一场』而不是首演日"},
+    "url":          {"type": "string", "pattern": "^https?://", "description": "活动详情页链接（推荐里会附上，必须可访问）"},
+
+    "end":          {"type": "string", "description": "结束时间，ISO 8601；给了 end 可省略 duration_hours"},
+    "duration_hours": {"type": "number", "minimum": 0},
+    "dates":        {"type": "array", "items": {"type": "string"}, "description": "全部场次日期（YYYY-MM-DD 或 ISO 时间）。用于计算剩余场次与稀缺性"},
+    "description":  {"type": "string", "description": "简介，一两句即可。也参与『不适合约会』关键词过滤（如 kids / family / volunteers）"},
+    "venue":        {"type": "string"},
+    "suburb":       {"type": "string"},
+    "lat":          {"type": "number", "description": "场馆纬度。和 lng 一起给出时自动计算距离与公交耗时；不给则交通维度走保守默认分"},
+    "lng":          {"type": "number"},
+    "price":        {"type": ["number", "string", "null"], "description": "人均澳元。免费填 0；字符串如 \"From $25\" 会取最低价。未知请填 null——默认配置下价格未知的活动会被剔除"},
+    "booking_url":  {"type": "string", "description": "购票/报名链接，缺省用 url"},
+    "category":     {"type": ["string", "array"], "items": {"type": "string"}, "description": "站点自己的分类词即可（Music / Theatre / Markets…），会自动归一到 film / performance / exhibition / festival / market / food / venue / experience / sport / nature / daytrip / sale。儿童、社区、电竞、动漫类会被硬排除"},
+    "tags":         {"type": "array", "items": {"type": "string"}, "description": "额外标签，同样参与类别归一"},
+    "ticket_status": {"enum": ["available", "limited", "sold_out"]},
+    "source_name":  {"type": "string", "description": "数据来自哪个网站/平台。多个来源报道同一活动时，去重后会合并成『讨论热度』"},
+
+    "signals": {
+      "type": "object",
+      "description": "可选：爬虫能直接拿到的评分信号，优先级最高。字段含义见 rubric.yaml",
+      "additionalProperties": false,
+      "properties": {
+        "window_days":        {"type": "integer", "minimum": 0},
+        "total_sessions":     {"type": "integer", "minimum": 0},
+        "first_time_in_city": {"type": "boolean"},
+        "is_first_edition":   {"type": "boolean"},
+        "new_opening_days":   {"type": "integer", "minimum": 0},
+        "is_annual_repeat":   {"type": "boolean"},
+        "has_new_content":    {"type": "boolean"},
+        "is_permanent":       {"type": "boolean"},
+        "media_mentions":     {"type": "integer", "minimum": 0},
+        "social_signal":      {"type": "integer", "minimum": 0},
+        "noise_level":        {"enum": ["quiet", "moderate", "loud"]},
+        "has_seating":        {"type": "boolean"},
+        "photogenic":         {"type": "boolean"},
+        "evening_or_weekend": {"type": "boolean"},
+        "nearby_food_options": {"type": "boolean"},
+        "interaction":        {"enum": ["co_create", "hands_on", "light_participate", "spectate_shared", "spectate_silent", "none"]},
+        "transit_minutes":    {"type": "number", "minimum": 0},
+        "transit_transfers":  {"type": "integer", "minimum": 0},
+        "walk_minutes":       {"type": "number", "minimum": 0},
+        "distance_km":        {"type": "number", "minimum": 0},
+        "solo_oriented":      {"type": "boolean"},
+        "community_venue":    {"type": "boolean"},
+        "ticket_status":      {"enum": ["available", "limited", "sold_out"]}
+      }
+    }
+  }
+}

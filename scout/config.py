@@ -78,6 +78,10 @@ def load_config(config_path: str | Path) -> dict[str, Any]:
     cfg["_config_path"] = str(path)
     cfg["rubric"] = rubric
     cfg["sources"] = sources_doc["sources"]
+
+    # 采集器插件：资源目录与数据目录下的 plugins/ 都会扫描（exe 版放在 exe 旁边即可）
+    from .collectors import load_plugins
+    load_plugins({Path(res_dir) / "plugins", Path(dat_dir) / "plugins"})
     return cfg
 
 

@@ -30,7 +30,8 @@ hiddenimports = [
     "scout.collectors.generic",
     "scout.collectors.astro",
     "scout.collectors.fixtures",
-    "scout.collectors.cityofsydney",
+    "scout.collectors.external",
+    "scout.geo",
 ]
 
 a = Analysis(
